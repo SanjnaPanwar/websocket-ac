@@ -1,7 +1,11 @@
 {
   "name": "client",
   "version": "1.0.0",
-  "description": "",
+  "description": "A description for your project",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SanjnaPanwar/websocket-ac.git"
+  },
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
