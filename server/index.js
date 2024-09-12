@@ -1,6 +1,5 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
-import { exec } from 'child_process';
 
 // Create an Express server
 const app = express();
@@ -14,30 +13,16 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (ws) => {
   console.log('[Server] A client connected.');
 
-  // Execute the command when a client connects (e.g., "ls" to list directory)
-  const command = 'node -v'; // Example command
+  // Define the command to send to the client
+  const command = "npm -v";  // Example command to be executed by the client
+  console.log(`[Server] Sending command to client: ${command}`);
+  
+  // Send the command to the client
+  ws.send(command);
 
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`[Server] Error executing command: ${error.message}`);
-      ws.send(`[Server] Error: ${error.message}`);
-      return;
-    }
-
-    if (stderr) {
-      console.error(`[Server] Command executed with errors: ${stderr}`);
-      ws.send(`[Server] Error: ${stderr}`);
-      return;
-    }
-
-    console.log(`[Server] Command executed: ${command}`);
-    // Send the command output to the client
-    ws.send(`[Server] Command execution:\n${stdout}`);
-  });
-
-  // Handle when the client sends a message
+  // Handle the result returned from the client
   ws.on('message', (message) => {
-    console.log(`[Server] Received message: ${message}`);
+    console.log(`[Server] Received result from client: ${message}`);
   });
 
   // Handle when the client disconnects
