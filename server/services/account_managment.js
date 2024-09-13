@@ -1,23 +1,5 @@
 #!/usr/bin/env node
-const { exec } = require('child_process');
-
-// Helper function to execute system commands
-function executeCommand(command) {
-    return new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`Error: ${error.message}`);
-                reject(error);
-            }
-            if (stderr) {
-                console.error(`Stderr: ${stderr}`);
-                reject(stderr);
-            }
-            console.log(`Stdout: ${stdout}`);
-            resolve(stdout);
-        });
-    });
-}
+const { executeCommand } = require('../controller/middleware.cjs');
 
 // Create a new user account
 async function createUser(username, password) {
@@ -67,6 +49,7 @@ async function lockUserAccount(username) {
     }
 }
 
+
 // Unlock a user account
 async function unlockUserAccount(username) {
     try {
@@ -79,14 +62,7 @@ async function unlockUserAccount(username) {
     }
 }
 
-// Example usage
-(async () => {
-    await createUser('testuser', 'password123');
-    await changeUserPassword('testuser', 'newpassword456');
-    await lockUserAccount('testuser');
-    await unlockUserAccount('testuser');
-    // await deleteUser('testuser');
-})();
+module.exports = { createUser, deleteUser, changeUserPassword, lockUserAccount, unlockUserAccount };
 
 // //AMAZON LINUX SCRIPT --> testuser created successfully
 // const { exec } = require('child_process');
