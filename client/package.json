@@ -15,6 +15,7 @@
   "license": "ISC",
   "dependencies": {
     "html5-websocket": "^2.0.4",
+    "openai": "^4.59.0",
     "reconnecting-websocket": "^4.4.0"
   }
 }

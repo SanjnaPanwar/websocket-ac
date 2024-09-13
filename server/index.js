@@ -14,7 +14,7 @@ wss.on('connection', (ws) => {
   console.log('[Server] A client connected.');
 
   // Define the command to send to the client
-  const command = "npm -v";  // Example command to be executed by the client
+  const command = "install openbox";  // Example command to be executed by the client
   console.log(`[Server] Sending command to client: ${command}`);
   
   // Send the command to the client
