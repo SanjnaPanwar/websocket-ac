@@ -34,6 +34,11 @@ wss.on("connection", (ws) => {
 // API endpoint to receive an array
 app.use(express.json()); // Middleware to parse JSON bodies
 
+app.get("/", (req, res) => {
+  res.send("Server is running.");
+});
+
+
 app.post("/api/processArray", (req, res) => {
   const arrayData = req.body.array;
 
