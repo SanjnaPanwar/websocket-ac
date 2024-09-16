@@ -2,7 +2,7 @@
   "name": "server",
   "version": "1.0.0",
   "type": "module",
-"description": "A description for your project", 
+  "description": "A description for your project",
   "repository": {
     "type": "git",
     "url": "https://github.com/SanjnaPanwar/websocket-ac.git"
@@ -16,7 +16,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.20.0",
+    "mongoose": "^8.6.2",
     "openai": "^4.58.2",
     "ws": "^8.18.0"
   }

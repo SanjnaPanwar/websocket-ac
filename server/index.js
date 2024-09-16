@@ -1,6 +1,7 @@
 import express from "express";
 import { WebSocketServer } from "ws";
-
+import mongoose  from "mongoose"
+import cors  from "cors";
 // Create an Express server
 const app = express();
 const server = app.listen(3000, () => {
@@ -9,6 +10,47 @@ const server = app.listen(3000, () => {
 
 // Create a WebSocket server
 const wss = new WebSocketServer({ server });
+
+mongoose
+  .connect(
+    "mongodb+srv://rwtshivay:rwtshivay@cluster0.d7a1m.mongodb.net/sample_mflix?retryWrites=true&w=majority&appName=Cluster0"
+  )
+  .then(() => {
+    console.log("Connected to the database!");
+  })
+  .catch((error) => {
+    console.log("Connection failed!", error);
+  });
+
+
+
+
+  const moviesSchema = new mongoose.Schema({
+    _id: mongoose.Schema.Types.ObjectId, // mongo db will automatically create an id for the document. // object id is a data type in mongodb that is used to store the unique identifier of the document.
+    title: String,
+    director: String,
+    genre: [String],
+    year: Number,
+  });
+  // Model => It is a constructor function that takes the schema and creates an instance of the document. It represents the collection in the database. COMPILED VERSION OF SCHEMA
+  const Movies = mongoose.model("Movies", moviesSchema); // Movies is the name of the collection in the database.
+  app.get("/movies", (req, res) => {
+    try {
+      Movies.find()
+        .limit(10)
+        .then((result) => {
+          // using limit to get only 10 documents from the database.
+          res.status(200).send(result);
+        });
+    } catch (error) {
+      res.status(500).send(error);
+    }
+  });
+
+
+
+
+
 
 wss.on("connection", (ws) => {
   console.log("[Server] A client connected.");
