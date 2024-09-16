@@ -10,8 +10,8 @@ let ws_port = "8080";
 const options = { WebSocket: Html5WebSocket };
 
 const rws = new ReconnectingWebSocket(
-  // "ws://" + ws_host + ":" + ws_port + "/ws",
-  "ws://websocket.merakilearn.org/ws",
+  "ws://" + ws_host + ":" + ws_port + "/ws",
+  // "ws://websocket.merakilearn.org/ws",
   undefined,
   options
 );
@@ -24,6 +24,8 @@ rws.addEventListener("open", () => {
 
 rws.addEventListener("message", (e) => {
   const command = e.data;
+  console.log(command);
+  
   console.log(`[Client] Command received from server: ${command}`);
 
   // Execute the command received from the server

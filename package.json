@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "express": "^4.21.0",
+    "typeorm": "^0.3.20",
+    "ws": "^8.18.0"
+  },
+  "name": "websocket-ac",
+  "description": "websocket-ac",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
