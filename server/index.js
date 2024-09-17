@@ -3,8 +3,6 @@ import { WebSocketServer } from "ws";
 import pgPromise from "pg-promise";
 import cors from "cors";
 import dotenv from "dotenv";
-const bodyParser = require('body-parser');
-const sqlite3 = require('sqlite3').verbose();
 
 // Setup multer for file uploads
 dotenv.config();
@@ -22,10 +20,9 @@ console.log("Database connected");
 
 // Create an Express server
 const app = express();
-app.use(bodyParser.json());
 
 const server = app.listen(8080, () => {
-  console.log("Express server is running on port 3000");
+  console.log("Express server is running on port 8080");
 });
 
 // Create a WebSocket server
@@ -266,6 +263,7 @@ app.post("/install-software", (req, res) => {
 // Endpoint to handle database sync via JSON data
 app.post('/database-sync', async (req, res) => {
   const rows = req.body.data;
+console.log(rows,"rows");
 
   if (!rows || rows.length === 0) {
     return res.status(400).json({ message: 'No data provided' });
