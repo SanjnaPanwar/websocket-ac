@@ -2,8 +2,11 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import pgPromise from "pg-promise";
 import cors from "cors";
-import { exec } from "child_process";
 import dotenv from "dotenv";
+const bodyParser = require('body-parser');
+const sqlite3 = require('sqlite3').verbose();
+
+// Setup multer for file uploads
 dotenv.config();
 
 // PostgreSQL database connection
@@ -19,6 +22,8 @@ console.log("Database connected");
 
 // Create an Express server
 const app = express();
+app.use(bodyParser.json());
+
 const server = app.listen(8080, () => {
   console.log("Express server is running on port 3000");
 });
@@ -256,4 +261,49 @@ app.post("/install-software", (req, res) => {
       client.send(JSON.stringify(command));
     }
   });
+});
+
+// Endpoint to handle database sync via JSON data
+app.post('/database-sync', async (req, res) => {
+  const rows = req.body.data;
+
+  if (!rows || rows.length === 0) {
+    return res.status(400).json({ message: 'No data provided' });
+  }
+
+  try {
+    // Loop through the data rows and insert/update the PostgreSQL database
+    for (const row of rows) {
+      const { mac_address, active_time, date, location } = row;
+
+      // Check if the MAC address and date exist in the server database
+      const existingRow = await db.oneOrNone(
+        `SELECT * FROM system_tracking WHERE mac_address = $1 AND "date" = $2`,
+        [mac_address, date]
+      );
+
+      if (existingRow) {
+        // Update the active_time if the record exists
+        const updatedTime = parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
+        await db.none(
+          `UPDATE system_tracking 
+           SET active_time = $1, location = $2 
+           WHERE mac_address = $3 AND "date" = $4`,
+          [updatedTime.toString(), location, mac_address, date]
+        );
+      } else {
+        // Insert a new row if the record does not exist
+        await db.none(
+          `INSERT INTO system_tracking (mac_address, active_time, "date", location) 
+           VALUES ($1, $2, $3, $4)`,
+          [mac_address, active_time, date, location]
+        );
+      }
+    }
+
+    res.json({ message: 'Database synchronized successfully' });
+  } catch (err) {
+    console.error('Error syncing database:', err.message);
+    res.status(500).json({ message: 'Failed to synchronize database' });
+  }
 });
