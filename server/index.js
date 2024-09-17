@@ -19,7 +19,7 @@ console.log("Database connected");
 
 // Create an Express server
 const app = express();
-const server = app.listen(3000, () => {
+const server = app.listen(8080, () => {
   console.log("Express server is running on port 3000");
 });
 
@@ -129,14 +129,14 @@ app.get("/clients", async (req, res) => {
 });
 
 // API to create a new client
-app.post("/create/client", async (req, res) => {
+app.post("/client/create", async (req, res) => {
   try {
-    const { name, status, location } = req.body;
+    const { name, mac_address } = req.body;
     const newClient = await db.one(
-      "INSERT INTO clients(name, status, location) VALUES($1, $2, $3) RETURNING *",
-      [name, status, location]
+      "INSERT INTO clients(name, mac_address) VALUES($1, $2) RETURNING *",
+      [name, mac_address]
     );
-    res.status(201).send({
+    res.status(200).send({
       message: "Client created successfully.",
       client: newClient,
     });
@@ -156,48 +156,83 @@ app.post("/create/client", async (req, res) => {
   }
 });
 
-// API to process an array
-app.post("/api/processArray", (req, res) => {
-  const arrayData = req.body.array;
-
-  if (!Array.isArray(arrayData)) {
-    return res
-      .status(400)
-      .send({ message: "Invalid input, expected an array." });
-  }
-
-  console.log("[API] Received array:", arrayData);
-  res.send({ message: "Array processed successfully.", data: arrayData });
-});
-
-// API to execute a command
-app.post("/api/executeCommand", (req, res) => {
-  const command = req.body.command;
-
-  if (!command) {
-    return res
-      .status(400)
-      .send({ message: "Invalid input, expected a command." });
-  }
-
-  console.log("[API] Executing command:", command);
-
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`[API] Error executing command: ${error.message}`);
-      return res
-        .status(500)
-        .send({ message: "Error executing command.", error: error.message });
+// API to update software status
+app.put("/client/update/software-status", async (req, res) => {
+  try {
+    const { mac_address } = req.body;
+    
+    // Ensure the mac_address is provided
+    if (!mac_address) {
+      return res.status(400).send({
+        message: "mac_address is required.",
+      });
     }
 
-    if (stderr) {
-      console.error(`[API] Command executed with errors: ${stderr}`);
-      return res
-        .status(500)
-        .send({ message: "Command executed with errors.", stderr });
+    // Update the software_installed status to true
+    const updatedClient = await db.one(
+      "UPDATE clients SET software_installed = true WHERE mac_address = $1 RETURNING *",
+      [mac_address]
+    );
+
+    res.status(200).send({
+      message: "Software status updated successfully.",
+      client: updatedClient,
+    });
+  } catch (error) {
+    console.error("[API] Error updating software status:", error);
+    
+    // Handle database error codes
+    if (error.code === "23505") {
+      res.status(400).send({
+        message: "Client with the same mac_address already exists.",
+        error: error.message,
+      });
+    } else {
+      res.status(500).send({
+        message: "Error updating software status.",
+        error: error.message,
+      });
+    }
+  }
+});
+
+// API to update wallpaper status
+app.put("/client/update/wallpaper-status", async (req, res) => {
+  try {
+    const { mac_address } = req.body;
+    
+    // Ensure the mac_address is provided
+    if (!mac_address) {
+      return res.status(400).send({
+        message: "mac_address is required.",
+      });
     }
 
-    console.log(`[API] Command output: ${stdout}`);
-    res.send({ message: "Command executed successfully.", output: stdout });
-  });
+    // Update the software_installed status to true
+    const updatedClient = await db.one(
+      "UPDATE clients SET wallpaper_changed = true WHERE mac_address = $1 RETURNING *",
+      [mac_address]
+    );
+
+    res.status(200).send({
+      message: "Software status updated successfully.",
+      client: updatedClient,
+    });
+  } catch (error) {
+    console.error("[API] Error updating software status:", error);
+    
+    // Handle database error codes
+    if (error.code === "23505") {
+      res.status(400).send({
+        message: "Client with the same mac_address already exists.",
+        error: error.message,
+      });
+    } else {
+      res.status(500).send({
+        message: "Error updating software status.",
+        error: error.message,
+      });
+    }
+  }
 });
+
