@@ -236,3 +236,24 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
   }
 });
 
+// API to install software and send command via WebSocket
+app.post("/install-software", (req, res) => {
+  const { software_name } = req.body;
+
+  // Validate the software name input
+  if (!software_name) {
+    return res.status(400).send({
+      message: "Please provide a valid software name.",
+    });
+  }
+
+  // Define the installation command
+  const command = `sudo apt-get install -y ${software_name}`;
+
+  // Send the command to all connected WebSocket clients
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(command));
+    }
+  });
+});
