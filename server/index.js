@@ -117,7 +117,7 @@ app.post("/pre-install-packages", async (req, res) => {
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
   try {
-    const clients = await db.any("SELECT * FROM clients LIMIT 10");
+    const clients = await db.any("SELECT * FROM sama_clients LIMIT 10");
     res.status(200).send({
       message: "Clients fetched successfully.",
       clients,
@@ -135,7 +135,7 @@ app.post("/client/create", async (req, res) => {
   try {
     const { name, mac_address } = req.body;
     const newClient = await db.one(
-      "INSERT INTO clients(name, mac_address) VALUES($1, $2) RETURNING *",
+      "INSERT INTO sama_clients(name, mac_address) VALUES($1, $2) RETURNING *",
       [name, mac_address]
     );
     res.status(200).send({
@@ -172,7 +172,7 @@ app.put("/client/update/software-status", async (req, res) => {
 
     // Update the software_installed status to true
     const updatedClient = await db.one(
-      "UPDATE clients SET software_installed = true WHERE mac_address = $1 RETURNING *",
+      "UPDATE sama_clients SET software_installed = true WHERE mac_address = $1 RETURNING *",
       [mac_address]
     );
 
@@ -212,7 +212,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
 
     // Update the software_installed status to true
     const updatedClient = await db.one(
-      "UPDATE clients SET wallpaper_changed = true WHERE mac_address = $1 RETURNING *",
+      "UPDATE sama_clients SET wallpaper_changed = true WHERE mac_address = $1 RETURNING *",
       [mac_address]
     );
 
@@ -276,7 +276,7 @@ console.log(rows,"rows");
 
       // Check if the MAC address and date exist in the server database
       const existingRow = await db.oneOrNone(
-        `SELECT * FROM system_tracking WHERE mac_address = $1 AND "date" = $2`,
+        `SELECT * FROM sama_system_tracking WHERE mac_address = $1 AND "date" = $2`,
         [mac_address, date]
       );
 
@@ -284,7 +284,7 @@ console.log(rows,"rows");
         // Update the active_time if the record exists
         const updatedTime = parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
         await db.none(
-          `UPDATE system_tracking 
+          `UPDATE sama_system_tracking 
            SET active_time = $1, location = $2 
            WHERE mac_address = $3 AND "date" = $4`,
           [updatedTime.toString(), location, mac_address, date]
@@ -292,7 +292,7 @@ console.log(rows,"rows");
       } else {
         // Insert a new row if the record does not exist
         await db.none(
-          `INSERT INTO system_tracking (mac_address, active_time, "date", location) 
+          `INSERT INTO sama_system_tracking (mac_address, active_time, "date", location) 
            VALUES ($1, $2, $3, $4)`,
           [mac_address, active_time, date, location]
         );
