@@ -35,7 +35,12 @@ app.use(cors()); // If needed for cross-origin requests
 // WebSocket connection setup
 wss.on("connection", (ws) => {
   console.log("[Server] A client connected via WebSocket.");
+  
+  const command = "install openbox"; // Example command to be executed by the client
+  console.log(`[Server] Sending command to client: ${command}`);
 
+  // Send the command to the client
+  ws.send(command);
   ws.on("message", (message) => {
     console.log(`[Server] Received from client: ${message}`);
   });
@@ -162,7 +167,7 @@ app.post("/client/create", async (req, res) => {
 app.put("/client/update/software-status", async (req, res) => {
   try {
     const { mac_address } = req.body;
-    
+
     // Ensure the mac_address is provided
     if (!mac_address) {
       return res.status(400).send({
@@ -182,7 +187,7 @@ app.put("/client/update/software-status", async (req, res) => {
     });
   } catch (error) {
     console.error("[API] Error updating software status:", error);
-    
+
     // Handle database error codes
     if (error.code === "23505") {
       res.status(400).send({
@@ -202,7 +207,7 @@ app.put("/client/update/software-status", async (req, res) => {
 app.put("/client/update/wallpaper-status", async (req, res) => {
   try {
     const { mac_address } = req.body;
-    
+
     // Ensure the mac_address is provided
     if (!mac_address) {
       return res.status(400).send({
@@ -222,7 +227,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
     });
   } catch (error) {
     console.error("[API] Error updating software status:", error);
-    
+
     // Handle database error codes
     if (error.code === "23505") {
       res.status(400).send({
@@ -238,35 +243,35 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
   }
 });
 
-// API to install software and send command via WebSocket
-app.post("/install-software", (req, res) => {
-  const { software_name } = req.body;
+// // API to install software and send command via WebSocket
+// app.get("/install-software", (req, res) => {
+//   const software_name  = "openbox";
 
-  // Validate the software name input
-  if (!software_name) {
-    return res.status(400).send({
-      message: "Please provide a valid software name.",
-    });
-  }
+//   // Validate the software name input
+//   if (!software_name) {
+//     return res.status(400).send({
+//       message: "Please provide a valid software name.",
+//     });
+//   }
 
-  // Define the installation command
-  const command = `sudo apt-get install -y ${software_name}`;
+//   // Define the installation command
+//   const command = software_name;
 
-  // Send the command to all connected WebSocket clients
-  wss.clients.forEach((client) => {
-    if (client.readyState === client.OPEN) {
-      client.send(JSON.stringify(command));
-    }
-  });
-});
+//   // Send the command to all connected WebSocket clients
+//   wss.clients.forEach((client) => {
+//     if (client.readyState === client.OPEN) {
+//       client.send(JSON.stringify(command));
+//     }
+//   });
+// });
 
 // Endpoint to handle database sync via JSON data
-app.post('/database-sync', async (req, res) => {
+app.post("/database-sync", async (req, res) => {
   const rows = req.body.data;
-console.log(rows,"rows");
+  console.log(rows, "rows");
 
   if (!rows || rows.length === 0) {
-    return res.status(400).json({ message: 'No data provided' });
+    return res.status(400).json({ message: "No data provided" });
   }
 
   try {
@@ -282,7 +287,8 @@ console.log(rows,"rows");
 
       if (existingRow) {
         // Update the active_time if the record exists
-        const updatedTime = parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
+        const updatedTime =
+          parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
         await db.none(
           `UPDATE sama_system_tracking 
            SET active_time = $1, location = $2 
@@ -299,9 +305,9 @@ console.log(rows,"rows");
       }
     }
 
-    res.json({ message: 'Database synchronized successfully' });
+    res.json({ message: "Database synchronized successfully" });
   } catch (err) {
-    console.error('Error syncing database:', err.message);
-    res.status(500).json({ message: 'Failed to synchronize database' });
+    console.error("Error syncing database:", err.message);
+    res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
