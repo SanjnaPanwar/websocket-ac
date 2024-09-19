@@ -177,13 +177,13 @@ app.post("/database-sync", async (req, res) => {
   }
 
   try {
-    for (const { mac_address, active_time, date, location, name } of rows) {
+    for (const { mac_address, active_time, date, location, username } of rows) {
       const clientQuery = `
         INSERT INTO sama_clients (name, mac_address)
         SELECT $1, $2 WHERE NOT EXISTS (
           SELECT 1 FROM sama_clients WHERE mac_address = $2
         )`;
-      await db.none(clientQuery, [name, mac_address]);
+      await db.none(clientQuery, [username, mac_address]);
 
       const existingRow = await db.oneOrNone(
         `SELECT active_time FROM sama_system_tracking WHERE mac_address = $1 AND "date" = $2`,
