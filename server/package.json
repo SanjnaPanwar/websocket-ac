@@ -1,6 +1,10 @@
 {
   "name": "server",
   "version": "1.0.0",
+<<<<<<< HEAD
+=======
+  "type": "module",
+>>>>>>> a3b6dc05766b85b9051f53b350fcba87431bc0a4
   "description": "A description for your project",
   "repository": {
     "type": "git",
@@ -15,7 +19,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
     "express": "^4.20.0",
+<<<<<<< HEAD
+=======
+    "pg-promise": "^11.9.1",
+>>>>>>> a3b6dc05766b85b9051f53b350fcba87431bc0a4
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
   }
 }
