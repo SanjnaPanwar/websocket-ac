@@ -10,8 +10,7 @@ let ws_port = "8080";
 const options = { WebSocket: Html5WebSocket };
 
 const rws = new ReconnectingWebSocket(
-  "ws://" + ws_host + ":" + ws_port + "/ws",
-  // "ws://websocket.merakilearn.org/ws",
+  "ws://" + ws_host + ":" + ws_port,
   undefined,
   options
 );
@@ -20,31 +19,48 @@ rws.timeout = 1000; // Timeout duration
 
 rws.addEventListener("open", () => {
   console.log("[Client] Connected to WebSocket server.");
+  
+  // Subscribe to channels after connection is established
+  const channelsToSubscribe = ["channel1", "channel2"]; // Specify the channels you want to subscribe to
+  rws.send(JSON.stringify({ type: "subscribe", channels: channelsToSubscribe }));
 });
 
 rws.addEventListener("message", (e) => {
-  const command = e.data;
-  console.log(`[Client] Command received from server: ${command}`);
+  try {
+    // Parse the message to extract the command
+    const data = JSON.parse(e.data);
+    
+    if (data.type === 'command') {
+      const command = data.message; // Extract the actual command from the message
 
-  // Execute the command received from the server
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`[Client] Error executing command: ${error.message}`);
-      rws.send(`[Client] Error: ${error.message}`);
-      return;
+      console.log(`[Client] Command received from server: ${command}`);
+
+      // Execute the command received from the server
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`[Client] Error executing command: ${error.message}`);
+          rws.send(`[Client] Error: ${error.message}`);
+          return;
+        }
+
+        if (stderr) {
+          console.error(`[Client] Command executed with errors: ${stderr}`);
+          rws.send(`[Client] Error: ${stderr}`);
+          return;
+        }
+
+        console.log(`[Client] Sending command output to server: ${stdout}`);
+        // Send the command output back to the server
+        rws.send(stdout);
+      });
+    } else {
+      console.log('[Client] Received non-command message.');
     }
-
-    if (stderr) {
-      console.error(`[Client] Command executed with errors: ${stderr}`);
-      rws.send(`[Client] Error: ${stderr}`);
-      return;
-    }
-
-    console.log(`[Client] Sending command output to server: ${stdout}`);
-    // Send the command output back to the server
-    rws.send(stdout);
-  });
+  } catch (err) {
+    console.error(`[Client] Error parsing message: ${err.message}`);
+  }
 });
+
 
 rws.addEventListener("close", () => {
   console.log("[Client] Connection closed.");
