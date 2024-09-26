@@ -17,13 +17,6 @@ const db = pgp({
   password: process.env.DB_PASSWORD,
 });
 
-import { executeCommand } from "./controller/middleware.cjs";
-// import { accountManagement } from "./routes/account_managment.js";
-// import { packageInstaller } from "./routes/software_installation.js";
-// import { wallpaper } from "./routes/wallpaper.js";
-// import { shortcut } from "./routes/shortcuts.js";
-
-const packageInstaller = require("./routes/software_installation.js");
 
 const app = express();
 app.use(express.json());
@@ -32,10 +25,6 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.send("Server is running.");
 });
-// app.use("/account", accountManagement);
-app.use("/installed/packages", packageInstaller);
-// app.use("/wallpaper", wallpaper);
-// app.use("/shortcut", shortcut);
 
 const server = app.listen(8080, () => {
   console.log("Server running on port 8080 and database connected.");
