@@ -31,58 +31,13 @@ const server = app.listen(8080, () => {
 
 // WebSocket server
 const wss = new WebSocketServer({ server });
-const channels = {}; // Channel management object
 
 // Middleware
 app.use(express.json());
 app.use(cors()); // Enable CORS
 
-// WebSocket connection setup
-wss.on("connection", (ws) => {
-  console.log("[Server] Client connected via WebSocket.");
-
-  ws.on("message", (message) => {
-    try {
-      const parsedMessage = JSON.parse(message);
-
-      // Handle channel subscription
-      if (parsedMessage.type === "subscribe") {
-        const { channels: requestedChannels } = parsedMessage;
-
-        requestedChannels.forEach((channel) => {
-          if (!channels[channel]) {
-            channels[channel] = new Set();
-          }
-          channels[channel].add(ws); // Add client to the channel
-        });
-
-        ws.subscribedChannels = requestedChannels; // Store subscribed channels
-      }
-      console.log(`[Server] Received message from client: ${message}`);
-    } catch (err) {
-      console.error("[Server] Error parsing message:", err.message);
-      ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
-    }
-  });
-
-  ws.on("close", () => {
-    if (ws.subscribedChannels) {
-      ws.subscribedChannels.forEach((channel) => {
-        channels[channel].delete(ws); // Remove from each channel
-
-        // Clean up empty channels
-        if (channels[channel].size === 0) {
-          delete channels[channel];
-          console.log(`[Server] Channel ${channel} removed.`);
-        }
-      });
-      console.log("[Server] Client unsubscribed from all channels.");
-    }
-  });
-});
-
 // Hard-coded commands for different channels
-const channelsData = {
+const channelData = {
   channel1: {
     type: "software",
     name: "brave-browser",
@@ -93,6 +48,7 @@ const channelsData = {
       "sudo apt update",
       "sudo apt install -y brave-browser",
     ],
+    sent: false, // Track whether the commands have been sent
   },
   channel2: {
     type: "test",
@@ -102,6 +58,7 @@ const channelsData = {
       "node -v",
       "df -h",
     ],
+    sent: false, // Track whether the commands have been sent
   },
   channel3: {
     type: "misc",
@@ -110,13 +67,64 @@ const channelsData = {
       "sudo apt update",
       "sudo apt upgrade -y",
     ],
+    sent: false, // Track whether the commands have been sent
   },
 };
 
-// Broadcast commands to the specified channel
+// Structure to store channel subscriptions
+const channelClients = {};
+
+// WebSocket connection setup
+wss.on("connection", (ws) => {
+  console.log("[Server] Client connected via WebSocket.");
+
+  ws.on("message", (message) => {
+    try {
+      const parsedMessage = JSON.parse(message);
+      console.log(parsedMessage);
+
+      // Handle channel subscription
+      if (parsedMessage.type === "subscribe") {
+        const { channels: requestedChannels } = parsedMessage;
+
+        requestedChannels.forEach((channel) => {
+          if (!channelClients[channel]) {
+            channelClients[channel] = new Set();
+          }
+          channelClients[channel].add(ws); // Add client to the channel's Set
+        });
+
+        ws.subscribedChannels = requestedChannels; // Store subscribed channels
+        requestedChannels.forEach((channel) => sendCommandsOnceOnSubscription(channel));
+      }
+
+      console.log(`[Server] Received message from client: ${message}`);
+    } catch (err) {
+      console.error("[Server] Error parsing message:", err.message);
+      ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
+    }
+  });
+
+  ws.on("close", () => {
+    if (ws.subscribedChannels) {
+      ws.subscribedChannels.forEach((channel) => {
+        channelClients[channel]?.delete(ws); // Remove from each channel's client set
+
+        // Clean up empty channels
+        if (channelClients[channel]?.size === 0) {
+          delete channelClients[channel];
+          console.log(`[Server] Channel ${channel} removed.`);
+        }
+      });
+      console.log("[Server] Client unsubscribed from all channels.");
+    }
+  });
+});
+
+// Function to broadcast commands to the specified channel
 const broadcastToChannel = (channel, message) => {
-  if (channels[channel]) {
-    channels[channel].forEach((client) => {
+  if (channelClients[channel]) {
+    channelClients[channel].forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(JSON.stringify(message)); // Send the command as JSON
       }
@@ -127,14 +135,24 @@ const broadcastToChannel = (channel, message) => {
   }
 };
 
-// Automatically broadcast hard-coded commands to each channel at intervals
-setInterval(() => {
-  Object.keys(channelsData).forEach((channel) => {
-    const message = channelsData[channel];
-    broadcastToChannel(channel, message);
-  });
-}, 10000); // Broadcast every 10 seconds
+// Function to send commands only once to the newly subscribed channel
+const sendCommandsOnceOnSubscription = (channel) => {
+  const channelMeta = channelData[channel];
 
+  // Only send if it hasn't been sent before
+  if (channelMeta && !channelMeta.sent) {
+    const message = {
+      type: channelMeta.type,
+      name: channelMeta.name,
+      commands: channelMeta.commands,
+    };
+
+    broadcastToChannel(channel, message);
+
+    // Mark the channel commands as sent
+    channelMeta.sent = true;
+  }
+};
 
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
@@ -143,9 +161,7 @@ app.get("/clients", async (req, res) => {
     res.status(200).send({ message: "Clients fetched successfully.", clients });
   } catch (error) {
     console.error("[API] Error fetching clients:", error);
-    res
-      .status(500)
-      .send({ message: "Error fetching clients", error: error.message });
+    res.status(500).send({ message: "Error fetching clients", error: error.message });
   }
 });
 
@@ -158,20 +174,15 @@ app.post("/client/create", async (req, res) => {
       "INSERT INTO sama_clients (name, mac_address) VALUES ($1, $2) RETURNING *",
       [name, mac_address]
     );
-    res
-      .status(200)
-      .send({ message: "Client created successfully.", client: newClient });
+    res.status(200).send({ message: "Client created successfully.", client: newClient });
   } catch (error) {
     console.error("[API] Error creating client:", error);
     const errorMessage =
-      error.code === "23505"
-        ? "Client with the same name already exists."
-        : "Error creating client.";
-    res
-      .status(error.code === "23505" ? 400 : 500)
-      .send({ message: errorMessage, error: error.message });
+      error.code === "23505" ? "Client with the same name already exists." : "Error creating client.";
+    res.status(error.code === "23505" ? 400 : 500).send({ message: errorMessage, error: error.message });
   }
 });
+
 
 // API to update software status
 app.put("/client/update/software-status", async (req, res) => {
