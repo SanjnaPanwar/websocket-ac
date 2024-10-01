@@ -1,5 +1,5 @@
 import express from "express";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import pgPromise from "pg-promise";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -17,14 +17,21 @@ const db = pgp({
   password: process.env.DB_PASSWORD,
 });
 
-// Create an Express server
 const app = express();
+app.use(express.json());
+
+// All routes
+app.get("/", (req, res) => {
+  res.send("Server is running.");
+});
+
 const server = app.listen(8080, () => {
   console.log("Server running on port 8080 and database connected.");
 });
 
 // WebSocket server
 const wss = new WebSocketServer({ server });
+const channels = {}; // Channel management object
 
 // Middleware
 app.use(express.json());
@@ -34,69 +41,100 @@ app.use(cors()); // Enable CORS
 wss.on("connection", (ws) => {
   console.log("[Server] Client connected via WebSocket.");
 
-  const command = "install openbox"; // Example command
-  ws.send(command);
-  console.log(`[Server] Command sent to client: ${command}`);
-
   ws.on("message", (message) => {
-    console.log(`[Server] Received from client: ${message}`);
+    try {
+      const parsedMessage = JSON.parse(message);
+
+      // Handle channel subscription
+      if (parsedMessage.type === "subscribe") {
+        const { channels: requestedChannels } = parsedMessage;
+
+        requestedChannels.forEach((channel) => {
+          if (!channels[channel]) {
+            channels[channel] = new Set();
+          }
+          channels[channel].add(ws); // Add client to the channel
+        });
+
+        ws.subscribedChannels = requestedChannels; // Store subscribed channels
+      }
+      console.log(`[Server] Received message from client: ${message}`);
+    } catch (err) {
+      console.error("[Server] Error parsing message:", err.message);
+      ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
+    }
   });
 
   ws.on("close", () => {
-    console.log("[Server] Client disconnected.");
+    if (ws.subscribedChannels) {
+      ws.subscribedChannels.forEach((channel) => {
+        channels[channel].delete(ws); // Remove from each channel
+
+        // Clean up empty channels
+        if (channels[channel].size === 0) {
+          delete channels[channel];
+          console.log(`[Server] Channel ${channel} removed.`);
+        }
+      });
+      console.log("[Server] Client unsubscribed from all channels.");
+    }
   });
 });
 
-// Root endpoint
-app.get("/", (req, res) => {
-  res.send({ message: "Server is live." });
-});
-
-// Helper function to install packages
-const installPackages = async () => {
-  const packageCommands = [
-    { manager: "apt", command: "sudo apt-get install python3-pip npm sqlite3 openssl rsync -y" },
-    { manager: "pip", command: "pip install --upgrade pip" },
-    { manager: "npm", command: "npm install -g npm" },
-  ];
-
-  let installedPackages = [];
-  
-  for (const { manager, command } of packageCommands) {
-    try {
-      console.log(`Running: ${command}`);
-      installedPackages.push({ manager, command });
-    } catch (error) {
-      console.error(`[Helper] Failed to install ${manager}, skipping...`);
-    }
-  }
-
-  if (!installedPackages.length) {
-    throw new Error("Failed to install packages using all managers.");
-  }
-
-  return installedPackages;
+// Hard-coded commands for different channels
+const channelsData = {
+  channel1: {
+    type: "software",
+    name: "brave-browser",
+    commands: [
+      "sudo apt install -y curl",
+      "sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg",
+      "echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list",
+      "sudo apt update",
+      "sudo apt install -y brave-browser",
+    ],
+  },
+  channel2: {
+    type: "test",
+    name: "version check",
+    commands: [
+      "nvm ls",
+      "node -v",
+      "df -h",
+    ],
+  },
+  channel3: {
+    type: "misc",
+    name: "system update",
+    commands: [
+      "sudo apt update",
+      "sudo apt upgrade -y",
+    ],
+  },
 };
 
-// API to pre-install packages
-app.post("/pre-install-packages", async (req, res) => {
-  try {
-    const installedPackages = await installPackages();
-
-    // Notify WebSocket clients
-    installedPackages.forEach((pkg) => {
-      wss.clients.forEach((client) => {
-        if (client.readyState === client.OPEN) {
-          client.send(pkg.command);
-        }
-      });
+// Broadcast commands to the specified channel
+const broadcastToChannel = (channel, message) => {
+  if (channels[channel]) {
+    channels[channel].forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify(message)); // Send the command as JSON
+      }
     });
-
-    res.status(200).send({ message: "Packages installed successfully.", installedPackages });
-  } catch (error) {
-    res.status(500).send({ message: "Failed to install packages.", error: error.message });
+    console.log(`[Server] Commands broadcasted to channel: ${channel}`);
+  } else {
+    console.log(`[Server] No clients subscribed to channel: ${channel}`);
   }
-});
+};
+
+// Automatically broadcast hard-coded commands to each channel at intervals
+setInterval(() => {
+  Object.keys(channelsData).forEach((channel) => {
+    const message = channelsData[channel];
+    broadcastToChannel(channel, message);
+  });
+}, 10000); // Broadcast every 10 seconds
+
 
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
@@ -105,7 +143,9 @@ app.get("/clients", async (req, res) => {
     res.status(200).send({ message: "Clients fetched successfully.", clients });
   } catch (error) {
     console.error("[API] Error fetching clients:", error);
-    res.status(500).send({ message: "Error fetching clients", error: error.message });
+    res
+      .status(500)
+      .send({ message: "Error fetching clients", error: error.message });
   }
 });
 
@@ -118,13 +158,18 @@ app.post("/client/create", async (req, res) => {
       "INSERT INTO sama_clients (name, mac_address) VALUES ($1, $2) RETURNING *",
       [name, mac_address]
     );
-    res.status(200).send({ message: "Client created successfully.", client: newClient });
+    res
+      .status(200)
+      .send({ message: "Client created successfully.", client: newClient });
   } catch (error) {
     console.error("[API] Error creating client:", error);
-    const errorMessage = error.code === "23505"
-      ? "Client with the same name already exists."
-      : "Error creating client.";
-    res.status(error.code === "23505" ? 400 : 500).send({ message: errorMessage, error: error.message });
+    const errorMessage =
+      error.code === "23505"
+        ? "Client with the same name already exists."
+        : "Error creating client.";
+    res
+      .status(error.code === "23505" ? 400 : 500)
+      .send({ message: errorMessage, error: error.message });
   }
 });
 
@@ -141,10 +186,16 @@ app.put("/client/update/software-status", async (req, res) => {
       "UPDATE sama_clients SET software_installed = true WHERE mac_address = $1 RETURNING *",
       [mac_address]
     );
-    res.status(200).send({ message: "Software status updated successfully.", client: updatedClient });
+    res.status(200).send({
+      message: "Software status updated successfully.",
+      client: updatedClient,
+    });
   } catch (error) {
     console.error("[API] Error updating software status:", error);
-    res.status(500).send({ message: "Error updating software status.", error: error.message });
+    res.status(500).send({
+      message: "Error updating software status.",
+      error: error.message,
+    });
   }
 });
 
@@ -161,10 +212,16 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
       "UPDATE sama_clients SET wallpaper_changed = true WHERE mac_address = $1 RETURNING *",
       [mac_address]
     );
-    res.status(200).send({ message: "Wallpaper status updated successfully.", client: updatedClient });
+    res.status(200).send({
+      message: "Wallpaper status updated successfully.",
+      client: updatedClient,
+    });
   } catch (error) {
     console.error("[API] Error updating wallpaper status:", error);
-    res.status(500).send({ message: "Error updating wallpaper status.", error: error.message });
+    res.status(500).send({
+      message: "Error updating wallpaper status.",
+      error: error.message,
+    });
   }
 });
 
@@ -191,7 +248,8 @@ app.post("/database-sync", async (req, res) => {
       );
 
       if (existingRow) {
-        const updatedTime = parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
+        const updatedTime =
+          parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
         await db.none(
           `UPDATE sama_system_tracking SET active_time = $1, location = $2 WHERE mac_address = $3 AND "date" = $4`,
           [updatedTime, location, mac_address, date]
