@@ -3,6 +3,7 @@ node_modules/
 jspm_packages/
 package-lock.json
 
+.vscode/
 # Optional npm cache directory
 .npm
 
