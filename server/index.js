@@ -17,7 +17,6 @@ const db = pgp({
   password: process.env.DB_PASSWORD,
 });
 
-
 const app = express();
 app.use(express.json());
 
@@ -82,89 +81,60 @@ wss.on("connection", (ws) => {
   });
 });
 
-// Broadcast message to a channel
+// Hard-coded commands for different channels
+const channelsData = {
+  channel1: {
+    type: "software",
+    name: "brave-browser",
+    commands: [
+      "sudo apt install -y curl",
+      "sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg",
+      "echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list",
+      "sudo apt update",
+      "sudo apt install -y brave-browser",
+    ],
+  },
+  channel2: {
+    type: "test",
+    name: "version check",
+    commands: [
+      "nvm ls",
+      "node -v",
+      "df -h",
+    ],
+  },
+  channel3: {
+    type: "misc",
+    name: "system update",
+    commands: [
+      "sudo apt update",
+      "sudo apt upgrade -y",
+    ],
+  },
+};
+
+// Broadcast commands to the specified channel
 const broadcastToChannel = (channel, message) => {
   if (channels[channel]) {
     channels[channel].forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "command", message })); // Send command as JSON
+        client.send(JSON.stringify(message)); // Send the command as JSON
       }
     });
-    console.log(`[Server] Command broadcasted to channel: ${channel}`);
+    console.log(`[Server] Commands broadcasted to channel: ${channel}`);
   } else {
     console.log(`[Server] No clients subscribed to channel: ${channel}`);
   }
 };
 
-// HTTP route to send a command to a channel
-app.post("/send-command/:channel", (req, res) => {
-  const { channel } = req.params;
-  const { command } = req.body;
+// Automatically broadcast hard-coded commands to each channel at intervals
+setInterval(() => {
+  Object.keys(channelsData).forEach((channel) => {
+    const message = channelsData[channel];
+    broadcastToChannel(channel, message);
+  });
+}, 10000); // Broadcast every 10 seconds
 
-  // Broadcast the command to the specified channel
-  broadcastToChannel(channel, command);
-  res
-    .status(200)
-    .send({ message: `Command sent to channel ${channel}: ${command}` });
-});
-
-// Root endpoint
-app.get("/", (req, res) => {
-  res.send({ message: "Server is live." });
-});
-
-// Helper function to install packages
-const installPackages = async () => {
-  const packageCommands = [
-    {
-      manager: "apt",
-      command: "sudo apt-get install python3-pip npm sqlite3 openssl rsync -y",
-    },
-    { manager: "pip", command: "pip install --upgrade pip" },
-    { manager: "npm", command: "npm install -g npm" },
-  ];
-
-  let installedPackages = [];
-
-  for (const { manager, command } of packageCommands) {
-    try {
-      console.log(`Running: ${command}`);
-      installedPackages.push({ manager, command });
-    } catch (error) {
-      console.error(`[Helper] Failed to install ${manager}, skipping...`);
-    }
-  }
-
-  if (!installedPackages.length) {
-    throw new Error("Failed to install packages using all managers.");
-  }
-
-  return installedPackages;
-};
-
-// API to pre-install packages
-app.post("/pre-install-packages", async (req, res) => {
-  try {
-    const installedPackages = await installPackages();
-
-    // Notify WebSocket clients
-    installedPackages.forEach((pkg) => {
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(pkg.command);
-        }
-      });
-    });
-
-    res
-      .status(200)
-      .send({ message: "Packages installed successfully.", installedPackages });
-  } catch (error) {
-    res
-      .status(500)
-      .send({ message: "Failed to install packages.", error: error.message });
-  }
-});
 
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
@@ -298,4 +268,3 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
-
