@@ -50,12 +50,10 @@ const channelData = {
     ],
   },
   channel2: {
-    type: "test",
-    name: "version check",
+    type: "wallpaper",
+    name: "wallpaper-change",
     commands: [
-      "nvm ls",
-      "node -v",
-      "df -h",
+      "https://th.bing.com/th/id/R.e6f2cedf317be31914a0057344eacd84?rik=lfjPJ3TUzOTvow&riu=http%3a%2f%2fwww.pixelstalk.net%2fwp-content%2fuploads%2f2016%2f04%2fDesktop-computer-nature-wallpaper-hd.jpg&ehk=9aJz5cz8NKlzsXNWOSKRpzEd3Ez5IHxpkLjp8NZ%2fmXg%3d&risl=&pid=ImgRaw&r=0",
     ],
   },
   channel3: {
