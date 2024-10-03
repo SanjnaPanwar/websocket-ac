@@ -48,7 +48,6 @@ const channelData = {
       "sudo apt update",
       "sudo apt install -y brave-browser",
     ],
-    sent: false, // Track whether the commands have been sent
   },
   channel2: {
     type: "test",
@@ -58,7 +57,6 @@ const channelData = {
       "node -v",
       "df -h",
     ],
-    sent: false, // Track whether the commands have been sent
   },
   channel3: {
     type: "misc",
@@ -67,7 +65,6 @@ const channelData = {
       "sudo apt update",
       "sudo apt upgrade -y",
     ],
-    sent: false, // Track whether the commands have been sent
   },
 };
 
@@ -92,10 +89,12 @@ wss.on("connection", (ws) => {
             channelClients[channel] = new Set();
           }
           channelClients[channel].add(ws); // Add client to the channel's Set
+
+          // Send commands to the new client subscribing to this channel
+          sendCommandsToClient(ws, channel);
         });
 
         ws.subscribedChannels = requestedChannels; // Store subscribed channels
-        requestedChannels.forEach((channel) => sendCommandsOnceOnSubscription(channel));
       }
 
       console.log(`[Server] Received message from client: ${message}`);
@@ -121,38 +120,24 @@ wss.on("connection", (ws) => {
   });
 });
 
-// Function to broadcast commands to the specified channel
-const broadcastToChannel = (channel, message) => {
-  if (channelClients[channel]) {
-    channelClients[channel].forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(message)); // Send the command as JSON
-      }
-    });
-    console.log(`[Server] Commands broadcasted to channel: ${channel}`);
-  } else {
-    console.log(`[Server] No clients subscribed to channel: ${channel}`);
-  }
-};
-
-// Function to send commands only once to the newly subscribed channel
-const sendCommandsOnceOnSubscription = (channel) => {
+// Function to send commands to a single client when they subscribe
+const sendCommandsToClient = (client, channel) => {
   const channelMeta = channelData[channel];
 
-  // Only send if it hasn't been sent before
-  if (channelMeta && !channelMeta.sent) {
+  if (channelMeta) {
     const message = {
       type: channelMeta.type,
       name: channelMeta.name,
       commands: channelMeta.commands,
     };
 
-    broadcastToChannel(channel, message);
-
-    // Mark the channel commands as sent
-    channelMeta.sent = true;
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(message)); // Send the command as JSON to the client
+    }
+    console.log(`[Server] Commands sent to client for channel: ${channel}`);
   }
 };
+
 
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
