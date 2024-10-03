@@ -30,6 +30,39 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 app.use(cors()); // Enable CORS
 
+// Hard-coded commands for different channels
+const channelData = {
+  channel1: {
+    type: "software",
+    name: "brave-browser",
+    commands: [
+      "sudo apt install -y curl",
+      "sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg",
+      "echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list",
+      "sudo apt update",
+      "sudo apt install -y brave-browser",
+    ],
+  },
+  channel2:{
+    type: "wallpaper",
+      name: "new-sama",
+      commands: [
+       "gsettings set org.gnome.desktop.background picture-uri 'https://images.pexels.com/photos/28292149/pexels-photo-28292149/free-photo-of-a-black-and-white-photo-of-many-boats-in-the-water.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'"
+      ]
+  },
+  channel3: {
+    type: "misc",
+    name: "system update",
+    commands: [
+      "sudo apt update",
+      "sudo apt upgrade -y",
+    ],
+  },
+};
+
+// Structure to store channel subscriptions
+const channelClients = {};
+
 // WebSocket connection setup
 wss.on("connection", (ws) => {
   console.log("[Server] Client connected via WebSocket.");
