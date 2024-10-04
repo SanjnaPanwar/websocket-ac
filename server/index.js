@@ -242,11 +242,9 @@ app.post("/database-sync", async (req, res) => {
       );
 
       if (existingRow) {
-        const updatedTime =
-          parseInt(existingRow.active_time, 10) + parseInt(active_time, 10);
         await db.none(
           `UPDATE sama_system_tracking SET active_time = $1, location = $2 WHERE mac_address = $3 AND "date" = $4`,
-          [updatedTime, location, mac_address, date]
+          [active_time, location, mac_address, date]
         );
       } else {
         await db.none(
@@ -262,3 +260,4 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
+
