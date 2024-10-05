@@ -3,6 +3,14 @@ import WebSocket, { WebSocketServer } from "ws";
 import pgPromise from "pg-promise";
 import cors from "cors";
 import dotenv from "dotenv";
+import { promises as fs } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get the current directory and set the JSON file path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const filePath = path.join(__dirname, "channels.json");
 
 // Load environment variables
 dotenv.config();
@@ -36,47 +44,31 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 app.use(cors()); // Enable CORS
 
-// Hard-coded commands for different channels
-const channelData = {
-  channel1: {
-    type: "software",
-    name: "brave-browser",
-    commands: [
-      "sudo apt install -y curl",
-      "sudo curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg",
-      "echo 'deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main' | sudo tee /etc/apt/sources.list.d/brave-browser-release.list",
-      "sudo apt update",
-      "sudo apt install -y brave-browser",
-    ],
-  },
-  channel2:{
-    type: "wallpaper",
-      name: "new-sama",
-      commands: [
-       "gsettings set org.gnome.desktop.background picture-uri 'https://images.pexels.com/photos/28292149/pexels-photo-28292149/free-photo-of-a-black-and-white-photo-of-many-boats-in-the-water.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2'"
-      ]
-  },
-  channel3: {
-    type: "misc",
-    name: "system update",
-    commands: [
-      "sudo apt update",
-      "sudo apt upgrade -y",
-    ],
-  },
+// Function to read channels from JSON file
+const readChannels = async () => {
+  try {
+    const data = await fs.readFile("./channels.json", "utf-8"); // Adjust the path as needed
+    return JSON.parse(data);
+  } catch (err) {
+    console.error("Error reading channels:", err.message);
+    throw new Error("Failed to read channels");
+  }
 };
 
 // Structure to store channel subscriptions
 const channelClients = {};
 
 // WebSocket connection setup
-wss.on("connection", (ws) => {
+wss.on("connection", async (ws) => {
   console.log("[Server] Client connected via WebSocket.");
+
+  // Fetch channels data once at the start
+  const channelData = await readChannels();
 
   ws.on("message", (message) => {
     try {
       const parsedMessage = JSON.parse(message);
-      console.log(parsedMessage);
+      console.log(parsedMessage, "ssss");
 
       // Handle channel subscription
       if (parsedMessage.type === "subscribe") {
@@ -87,9 +79,10 @@ wss.on("connection", (ws) => {
             channelClients[channel] = new Set();
           }
           channelClients[channel].add(ws); // Add client to the channel's Set
+          console.log(channelData, "channelData");
 
           // Send commands to the new client subscribing to this channel
-          sendCommandsToClient(ws, channel);
+          sendCommandsToClient(ws, channelData, channel);
         });
 
         ws.subscribedChannels = requestedChannels; // Store subscribed channels
@@ -119,8 +112,9 @@ wss.on("connection", (ws) => {
 });
 
 // Function to send commands to a single client when they subscribe
-const sendCommandsToClient = (client, channel) => {
+const sendCommandsToClient = (client, channelData, channel) => {
   const channelMeta = channelData[channel];
+  console.log(channelMeta, "channelMeta");
 
   if (channelMeta) {
     const message = {
@@ -136,7 +130,6 @@ const sendCommandsToClient = (client, channel) => {
   }
 };
 
-
 // API to fetch all clients
 app.get("/clients", async (req, res) => {
   try {
@@ -144,7 +137,9 @@ app.get("/clients", async (req, res) => {
     res.status(200).send({ message: "Clients fetched successfully.", clients });
   } catch (error) {
     console.error("[API] Error fetching clients:", error);
-    res.status(500).send({ message: "Error fetching clients", error: error.message });
+    res
+      .status(500)
+      .send({ message: "Error fetching clients", error: error.message });
   }
 });
 
@@ -157,15 +152,20 @@ app.post("/client/create", async (req, res) => {
       "INSERT INTO sama_clients (name, mac_address) VALUES ($1, $2) RETURNING *",
       [name, mac_address]
     );
-    res.status(200).send({ message: "Client created successfully.", client: newClient });
+    res
+      .status(200)
+      .send({ message: "Client created successfully.", client: newClient });
   } catch (error) {
     console.error("[API] Error creating client:", error);
     const errorMessage =
-      error.code === "23505" ? "Client with the same name already exists." : "Error creating client.";
-    res.status(error.code === "23505" ? 400 : 500).send({ message: errorMessage, error: error.message });
+      error.code === "23505"
+        ? "Client with the same name already exists."
+        : "Error creating client.";
+    res
+      .status(error.code === "23505" ? 400 : 500)
+      .send({ message: errorMessage, error: error.message });
   }
 });
-
 
 // API to update software status
 app.put("/client/update/software-status", async (req, res) => {
@@ -261,3 +261,80 @@ app.post("/database-sync", async (req, res) => {
   }
 });
 
+// Helper function to write to the JSON file
+async function writeChannels(channels) {
+  try {
+    await fs.writeFile(filePath, JSON.stringify(channels, null, 2), "utf8");
+  } catch (err) {
+    console.error("Error writing to JSON file:", err);
+    throw new Error("Could not write channels");
+  }
+}
+
+// Get commands for a specific channel by name from JSON
+app.get("/channels/:channelName/commands", async (req, res) => {
+  const { channelName } = req.params;
+
+  try {
+    const channels = await readChannels();
+
+    if (!channels[channelName]) {
+      return res.status(404).json({ message: "Channel not found" });
+    }
+
+    const commands = channels[channelName].commands || "";
+    res.json({ commands });
+  } catch (err) {
+    console.error("Error fetching commands:", err.message);
+    res.status(500).json({ message: "Failed to fetch commands" });
+  }
+});
+
+// Get all channels from JSON
+app.get("/channels", async (req, res) => {
+  try {
+    const channels = await readChannels();
+
+    // Return all channels in the response
+    res.json(channels);
+  } catch (err) {
+    console.error("Error fetching channels:", err.message);
+    res.status(500).json({ message: "Failed to fetch channels" });
+  }
+});
+
+
+
+
+// API for adding a new channel
+app.post("/channels", async (req, res) => {
+  const { channelName, type, name, commands } = req.body;
+
+  if (!channelName || !type || !name || !commands || !Array.isArray(commands)) {
+    return res.status(400).json({ message: "Invalid input. Please provide channelName, type, name, and commands." });
+  }
+
+  try {
+    const channels = await readChannels();
+
+    // Check if the channel already exists
+    if (channels[channelName]) {
+      return res.status(409).json({ message: "Channel already exists." });
+    }
+
+    // Add new channel data
+    channels[channelName] = {
+      type,
+      name,
+      commands,
+    };
+
+    // Write updated channels back to JSON file
+    await writeChannels(channels);
+
+    res.status(201).json({ message: "Channel added successfully.", channel: channels[channelName] });
+  } catch (err) {
+    console.error("Error adding channel:", err.message);
+    res.status(500).json({ message: "Failed to add channel." });
+  }
+});
