@@ -395,12 +395,28 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       imageUrl: uploadedImage,
     });
 
-    const wallpaperCommand = `"gsettings set org.gnome.desktop.backgroundpicture-uri '${uploadedImage}'"`;
-    // Check if channel1 exists and then append the command
+    // Read existing channel data
     const channelData = await readChannels();
 
+    // Prepare the wallpaper command
+    const wallpaperCommandPrefix =
+      "gsettings set org.gnome.desktop.background picture-uri";
+    const wallpaperCommand = `${wallpaperCommandPrefix} '${uploadedImage}'`;
+
+    // Check if channel1 exists and has commands array
     if (channelData.channel1 && Array.isArray(channelData.channel1.commands)) {
-      channelData.channel1.commands.push(wallpaperCommand);
+      // Find the index of the existing gsettings command
+      const existingCommandIndex = channelData.channel1.commands.findIndex(
+        (command) => command.startsWith(wallpaperCommandPrefix)
+      );
+
+      if (existingCommandIndex !== -1) {
+        // Update the existing gsettings command with the new URL
+        channelData.channel1.commands[existingCommandIndex] = wallpaperCommand;
+      } else {
+        // If not found, push the new wallpaper command
+        channelData.channel1.commands.push(wallpaperCommand);
+      }
     } else {
       console.error("Channel1 or commands array not found");
     }
