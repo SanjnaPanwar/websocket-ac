@@ -6,20 +6,22 @@ import dotenv from "dotenv";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-// import AWS from 'aws-sdk';
-// import multer from 'multer';
-// import { v4 as uuidv4 } from 'uuid';
+import AWS from "aws-sdk";
+import multer from "multer";
+import { v4 as uuidv4 } from "uuid";
 
-// // AWS S3 setup
-// const s3 = new AWS.S3({
-//   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-//   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-//   region: process.env.AWS_REGION,
-// });
+// AWS S3 setup
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION,
+});
 
-// // Multer setup for handling file uploads
-// const storage = multer.memoryStorage();
-// const upload = multer({ storage });
+// Multer setup for handling file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for example
+});
 
 // Get the current directory and set the JSON file path
 const __filename = fileURLToPath(import.meta.url);
@@ -318,7 +320,9 @@ app.post("/channels", async (req, res) => {
       channels[channelName].commands = [];
 
       // Log to indicate that the existing commands have been cleared
-      console.log(`[Server] Cleared commands for existing channel: ${channelName}`);
+      console.log(
+        `[Server] Cleared commands for existing channel: ${channelName}`
+      );
     }
 
     // Update or add new channel data
@@ -331,7 +335,7 @@ app.post("/channels", async (req, res) => {
     // Write updated channels back to JSON file
     await writeChannels(channels);
 
-    res.status(201).json({
+    res.status(200).json({
       message: "Channel added/updated successfully.",
       channel: channels[channelName],
     });
@@ -341,13 +345,12 @@ app.post("/channels", async (req, res) => {
   }
 });
 
-
 // Get commands for a specific channel by name from JSON
 app.get("/channels/:channelName", async (req, res) => {
-  const { channelName } = req.params; 
+  const { channelName } = req.params;
 
   try {
-    const channels = await readChannels(); 
+    const channels = await readChannels();
 
     if (!channels[channelName]) {
       return res.status(404).json({ message: "Channel not found" });
@@ -361,36 +364,53 @@ app.get("/channels/:channelName", async (req, res) => {
   }
 });
 
+// // Image upload route for a single image
+app.post("/upload", upload.single("image"), async (req, res) => {
+  try {
+    // Check if the file is uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
 
-// // Image upload route
-// app.post('/upload', upload.single('image'), async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ message: 'No file uploaded.' });
-//     }
+    // Generate a unique filename
+    const fileName = `${uuidv4()}-${req.file.originalname}`;
 
-//     const fileContent = req.file.buffer;
-//     const fileName = `${uuidv4()}-${req.file.originalname}`;
+    // Define the S3 upload parameters
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME, // Your S3 bucket name
+      Key: `sama_wallpaper/${fileName}`, // The filename in S3
+      Body: req.file.buffer, // File buffer from Multer
+      ContentType: req.file.mimetype, // Content type (MIME type of the file)
+      ACL: "public-read", // Access control list for the file (optional)
+    };
 
-//     // S3 upload parameters
-//     const params = {
-//       Bucket: process.env.S3_BUCKET_NAME,
-//       Key: fileName,
-//       Body: fileContent,
-//       ContentType: req.file.mimetype,
-//       ACL: 'public-read', // Optional, for public access
-//     };
+    // Upload the file to S3
+    const data = await s3.upload(params).promise();
 
-//     // Uploading file to S3
-//     const data = await s3.upload(params).promise();
-    
-//     // Send the S3 file URL as the response
-//     res.status(200).json({
-//       message: 'Image uploaded successfully',
-//       imageUrl: data.Location,
-//     });
-//   } catch (error) {
-//     console.error('Error uploading image:', error);
-//     res.status(500).json({ message: 'Failed to upload image', error: error.message });
-//   }
-// });
+    // Respond with the S3 file URL
+    const uploadedImage = data.Location;
+
+    res.status(200).json({
+      message: "Image uploaded successfully",
+      imageUrl: uploadedImage,
+    });
+
+    const wallpaperCommand = `"gsettings set org.gnome.desktop.backgroundpicture-uri '${uploadedImage}'"`;
+    // Check if channel1 exists and then append the command
+    const channelData = await readChannels();
+
+    if (channelData.channel1 && Array.isArray(channelData.channel1.commands)) {
+      channelData.channel1.commands.push(wallpaperCommand);
+    } else {
+      console.error("Channel1 or commands array not found");
+    }
+
+    // Write the updated channel data back
+    await writeChannels(channelData);
+  } catch (error) {
+    console.error("Error uploading image:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to upload image", error: error.message });
+  }
+});
