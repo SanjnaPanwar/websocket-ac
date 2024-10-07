@@ -6,6 +6,20 @@ import dotenv from "dotenv";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+// import AWS from 'aws-sdk';
+// import multer from 'multer';
+// import { v4 as uuidv4 } from 'uuid';
+
+// // AWS S3 setup
+// const s3 = new AWS.S3({
+//   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+//   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+//   region: process.env.AWS_REGION,
+// });
+
+// // Multer setup for handling file uploads
+// const storage = multer.memoryStorage();
+// const upload = multer({ storage });
 
 // Get the current directory and set the JSON file path
 const __filename = fileURLToPath(import.meta.url);
@@ -271,25 +285,6 @@ async function writeChannels(channels) {
   }
 }
 
-// Get commands for a specific channel by name from JSON
-app.get("/channels/:channelName/commands", async (req, res) => {
-  const { channelName } = req.params;
-
-  try {
-    const channels = await readChannels();
-
-    if (!channels[channelName]) {
-      return res.status(404).json({ message: "Channel not found" });
-    }
-
-    const commands = channels[channelName].commands || "";
-    res.json({ commands });
-  } catch (err) {
-    console.error("Error fetching commands:", err.message);
-    res.status(500).json({ message: "Failed to fetch commands" });
-  }
-});
-
 // Get all channels from JSON
 app.get("/channels", async (req, res) => {
   try {
@@ -303,15 +298,15 @@ app.get("/channels", async (req, res) => {
   }
 });
 
-
-
-
 // API for adding a new channel
 app.post("/channels", async (req, res) => {
   const { channelName, type, name, commands } = req.body;
 
   if (!channelName || !type || !name || !commands || !Array.isArray(commands)) {
-    return res.status(400).json({ message: "Invalid input. Please provide channelName, type, name, and commands." });
+    return res.status(400).json({
+      message:
+        "Invalid input. Please provide channelName, type, name, and commands.",
+    });
   }
 
   try {
@@ -319,22 +314,83 @@ app.post("/channels", async (req, res) => {
 
     // Check if the channel already exists
     if (channels[channelName]) {
-      return res.status(409).json({ message: "Channel already exists." });
+      // Clear the existing commands array
+      channels[channelName].commands = [];
+
+      // Log to indicate that the existing commands have been cleared
+      console.log(`[Server] Cleared commands for existing channel: ${channelName}`);
     }
 
-    // Add new channel data
+    // Update or add new channel data
     channels[channelName] = {
       type,
       name,
-      commands,
+      commands, // New commands added or updated after clearing
     };
 
     // Write updated channels back to JSON file
     await writeChannels(channels);
 
-    res.status(201).json({ message: "Channel added successfully.", channel: channels[channelName] });
+    res.status(201).json({
+      message: "Channel added/updated successfully.",
+      channel: channels[channelName],
+    });
   } catch (err) {
     console.error("Error adding channel:", err.message);
-    res.status(500).json({ message: "Failed to add channel." });
+    res.status(500).json({ message: "Failed to add/update channel." });
   }
 });
+
+
+// Get commands for a specific channel by name from JSON
+app.get("/channels/:channelName", async (req, res) => {
+  const { channelName } = req.params; 
+
+  try {
+    const channels = await readChannels(); 
+
+    if (!channels[channelName]) {
+      return res.status(404).json({ message: "Channel not found" });
+    }
+
+    const commands = channels[channelName].commands || "";
+    res.json({ commands });
+  } catch (err) {
+    console.error("Error fetching commands:", err.message);
+    res.status(500).json({ message: "Failed to fetch commands" });
+  }
+});
+
+
+// // Image upload route
+// app.post('/upload', upload.single('image'), async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: 'No file uploaded.' });
+//     }
+
+//     const fileContent = req.file.buffer;
+//     const fileName = `${uuidv4()}-${req.file.originalname}`;
+
+//     // S3 upload parameters
+//     const params = {
+//       Bucket: process.env.S3_BUCKET_NAME,
+//       Key: fileName,
+//       Body: fileContent,
+//       ContentType: req.file.mimetype,
+//       ACL: 'public-read', // Optional, for public access
+//     };
+
+//     // Uploading file to S3
+//     const data = await s3.upload(params).promise();
+    
+//     // Send the S3 file URL as the response
+//     res.status(200).json({
+//       message: 'Image uploaded successfully',
+//       imageUrl: data.Location,
+//     });
+//   } catch (error) {
+//     console.error('Error uploading image:', error);
+//     res.status(500).json({ message: 'Failed to upload image', error: error.message });
+//   }
+// });
