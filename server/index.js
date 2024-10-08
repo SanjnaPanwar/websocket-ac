@@ -82,11 +82,8 @@ wss.on("connection", async (ws) => {
   const channelData = await readChannels();
 
   ws.on("message", (message) => {
-    console.log(message, "message");
-
     try {
       const parsedMessage = JSON.parse(message);
-      console.log(parsedMessage, "parsedMessage");
 
       // Handle channel subscription
       if (parsedMessage.type === "subscribe") {
@@ -97,7 +94,6 @@ wss.on("connection", async (ws) => {
             channelClients[channel] = new Set();
           }
           channelClients[channel].add(ws); // Add client to the channel's Set
-          console.log(channelData, "channelData");
 
           // Send commands to the new client subscribing to this channel
           sendCommandsToClient(ws, channelData, channel);
@@ -107,9 +103,7 @@ wss.on("connection", async (ws) => {
       }
 
       console.log(`[Server] Received message from client: ${message}`);
-    } catch (err) {
-      console.log(err, "err++++++++++++");
-      
+    } catch (err) {      
       console.error("[Server] Error parsing message:", err.message);
       ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
     }
