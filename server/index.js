@@ -82,9 +82,11 @@ wss.on("connection", async (ws) => {
   const channelData = await readChannels();
 
   ws.on("message", (message) => {
+    console.log(message, "message");
+
     try {
       const parsedMessage = JSON.parse(message);
-      console.log(parsedMessage, "ssss");
+      console.log(parsedMessage, "parsedMessage");
 
       // Handle channel subscription
       if (parsedMessage.type === "subscribe") {
@@ -106,6 +108,8 @@ wss.on("connection", async (ws) => {
 
       console.log(`[Server] Received message from client: ${message}`);
     } catch (err) {
+      console.log(err, "err++++++++++++");
+      
       console.error("[Server] Error parsing message:", err.message);
       ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
     }
@@ -372,6 +376,13 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
+    // Extract the channelName from the request body
+    const { channelName } = req.body;
+
+    if (!channelName) {
+      return res.status(400).json({ message: "Channel name is required." });
+    }
+
     // Generate a unique filename
     const fileName = `${uuidv4()}-${req.file.originalname}`;
 
@@ -399,34 +410,32 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const channelData = await readChannels();
 
     // Prepare the wallpaper command
-    const wallpaperCommandPrefix =
-      "gsettings set org.gnome.desktop.background picture-uri";
+    const wallpaperCommandPrefix = "gsettings set org.gnome.desktop.background picture-uri";
     const wallpaperCommand = `${wallpaperCommandPrefix} '${uploadedImage}'`;
 
-    // Check if channel1 exists and has commands array
-    if (channelData.channel1 && Array.isArray(channelData.channel1.commands)) {
+    // Check if the provided channel exists and has a commands array
+    if (channelData[channelName] && Array.isArray(channelData[channelName].commands)) {
       // Find the index of the existing gsettings command
-      const existingCommandIndex = channelData.channel1.commands.findIndex(
+      const existingCommandIndex = channelData[channelName].commands.findIndex(
         (command) => command.startsWith(wallpaperCommandPrefix)
       );
 
       if (existingCommandIndex !== -1) {
         // Update the existing gsettings command with the new URL
-        channelData.channel1.commands[existingCommandIndex] = wallpaperCommand;
+        channelData[channelName].commands[existingCommandIndex] = wallpaperCommand;
       } else {
         // If not found, push the new wallpaper command
-        channelData.channel1.commands.push(wallpaperCommand);
+        channelData[channelName].commands.push(wallpaperCommand);
       }
     } else {
-      console.error("Channel1 or commands array not found");
+      console.error(`Channel "${channelName}" or commands array not found`);
     }
 
     // Write the updated channel data back
     await writeChannels(channelData);
   } catch (error) {
     console.error("Error uploading image:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to upload image", error: error.message });
+    res.status(500).json({ message: "Failed to upload image", error: error.message });
   }
 });
+
