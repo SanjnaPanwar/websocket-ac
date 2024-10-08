@@ -20,7 +20,7 @@ const s3 = new AWS.S3({
 // Multer setup for handling file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit for example
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit for example
 });
 
 // Get the current directory and set the JSON file path
