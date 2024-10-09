@@ -365,71 +365,85 @@ app.get("/channels/:channelName", async (req, res) => {
 // // Image upload route for a single image
 app.post("/upload", upload.single("image"), async (req, res) => {
   try {
-    // Check if the file is uploaded
+    // Check if a file is uploaded
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
-    // Extract the channelName from the request body
-    const { channelName } = req.body;
-
-    if (!channelName) {
-      return res.status(400).json({ message: "Channel name is required." });
+    // Extract the wallpaper name from the request body
+    const { wallpaperName } = req.body;
+    if (!wallpaperName) {
+      return res.status(400).json({ message: "Wallpaper name is required." });
     }
 
-    // Generate a unique filename
+    // Generate a unique filename for the S3 upload
     const fileName = `${uuidv4()}-${req.file.originalname}`;
 
-    // Define the S3 upload parameters
+    // S3 upload parameters
     const params = {
-      Bucket: process.env.S3_BUCKET_NAME, // Your S3 bucket name
-      Key: `sama_wallpaper/${fileName}`, // The filename in S3
-      Body: req.file.buffer, // File buffer from Multer
-      ContentType: req.file.mimetype, // Content type (MIME type of the file)
-      ACL: "public-read", // Access control list for the file (optional)
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: `sama_wallpaper/${fileName}`,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+      ACL: "public-read",
     };
 
-    // Upload the file to S3
+    // Upload image to S3
     const data = await s3.upload(params).promise();
-
-    // Respond with the S3 file URL
     const uploadedImage = data.Location;
 
+    // Read existing channel data from the JSON file
+    let channelData;
+    try {
+      channelData = await readChannels();
+    } catch (error) {
+      console.error("Error reading channels:", error);
+      return res.status(500).json({ message: "Failed to read channel data", error: error.message });
+    }
+
+    // Define the wallpaper command
+    const wallpaperCommand = `gsettings set org.gnome.desktop.background picture-uri '${uploadedImage}'`;
+
+    // Check if the wallpaper section exists in channel data
+    if (!channelData["wallpaper"]) {
+      // If not, create a new structure
+      channelData["wallpaper"] = {
+        type: "wallpaper",
+        name: wallpaperName,
+        commands: [wallpaperCommand],
+      };
+    } else {
+      // If it exists, update the commands array
+      const existingCommands = channelData["wallpaper"].commands || [];
+      const commandIndex = existingCommands.findIndex(cmd => cmd.startsWith("DISPLAY:0 gsettings set org.gnome.desktop.background picture-uri"));
+
+      if (commandIndex !== -1) {
+        // Update the existing wallpaper command
+        channelData["wallpaper"].commands[commandIndex] = wallpaperCommand;
+      } else {
+        // Append a new wallpaper command if not found
+        channelData["wallpaper"].commands.push(wallpaperCommand);
+      }
+
+      // Update the wallpaper name if necessary
+      channelData["wallpaper"].name = wallpaperName;
+    }
+
+    // Write the updated channel data back to the JSON file
+    try {
+      await writeChannels(channelData);
+    } catch (error) {
+      console.error("Error writing channels:", error);
+      return res.status(500).json({ message: "Failed to write channel data", error: error.message });
+    }
+
+    // Respond with success and the uploaded image URL
     res.status(200).json({
       message: "Image uploaded successfully",
       imageUrl: uploadedImage,
     });
-
-    // Read existing channel data
-    const channelData = await readChannels();
-
-    // Prepare the wallpaper command
-    const wallpaperCommandPrefix = "gsettings set org.gnome.desktop.background picture-uri";
-    const wallpaperCommand = `${wallpaperCommandPrefix} '${uploadedImage}'`;
-
-    // Check if the provided channel exists and has a commands array
-    if (channelData[channelName] && Array.isArray(channelData[channelName].commands)) {
-      // Find the index of the existing gsettings command
-      const existingCommandIndex = channelData[channelName].commands.findIndex(
-        (command) => command.startsWith(wallpaperCommandPrefix)
-      );
-
-      if (existingCommandIndex !== -1) {
-        // Update the existing gsettings command with the new URL
-        channelData[channelName].commands[existingCommandIndex] = wallpaperCommand;
-      } else {
-        // If not found, push the new wallpaper command
-        channelData[channelName].commands.push(wallpaperCommand);
-      }
-    } else {
-      console.error(`Channel "${channelName}" or commands array not found`);
-    }
-
-    // Write the updated channel data back
-    await writeChannels(channelData);
   } catch (error) {
     console.error("Error uploading image:", error);
     res.status(500).json({ message: "Failed to upload image", error: error.message });
   }
 });
-
