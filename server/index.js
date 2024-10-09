@@ -447,3 +447,33 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     res.status(500).json({ message: "Failed to upload image", error: error.message });
   }
 });
+
+
+// GET API for fetching wallpaper details from channel.json
+app.get("/wallpaper", async (req, res) => {
+  try {
+    // Read the channel data from the JSON file
+    let channelData;
+    try {
+      channelData = await readChannels();
+    } catch (error) {
+      console.error("Error reading channels:", error);
+      return res.status(500).json({ message: "Failed to read channel data", error: error.message });
+    }
+
+    // Check if the wallpaper section exists
+    if (!channelData["wallpaper"]) {
+      return res.status(404).json({ message: "Wallpaper not found" });
+    }
+
+    // Return the wallpaper details
+    res.status(200).json({
+      type: channelData["wallpaper"].type,
+      name: channelData["wallpaper"].name,
+      commands: channelData["wallpaper"].commands,
+    });
+  } catch (error) {
+    console.error("Error fetching wallpaper details:", error);
+    res.status(500).json({ message: "Failed to fetch wallpaper details", error: error.message });
+  }
+});
