@@ -58,7 +58,9 @@ const wss = new WebSocketServer({ server });
 
 // Middleware
 app.use(express.json());
-app.use(cors()); // Enable CORS
+app.use(cors({
+  origin: process.env.CLIENT_URL 
+}));
 
 // Function to read channels from JSON file
 const readChannels = async () => {
