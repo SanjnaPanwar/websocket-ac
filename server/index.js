@@ -445,7 +445,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       return res.status(400).json({ message: "No file uploaded." });
     }
 
-    // Extract the wallpaper name from the request body
+    // Extract the channel name from the request body
     const { channelName } = req.body;
     if (!channelName) {
       return res.status(400).json({ message: "Channel name is required." });
@@ -480,36 +480,29 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 
     // Define the wallpaper command
     const wallpaperCommand = `gsettings set org.gnome.desktop.background picture-uri '${uploadedImage}'`;
+    const wallpaperCommandPrefix = "gsettings set org.gnome.desktop.background picture-uri";
 
-    // Check if the wallpaper section exists in channel data
+    // Check if the provided channel exists and has a commands array
     if (!channelData[`${channelName}-wallpaper`]) {
-      // If not, create a new structure
+      // Create new channel if it doesn't exist
       channelData[`${channelName}-wallpaper`] = {
         type: "wallpaper",
         name: `${channelName}-wallpaper`,
         commands: [wallpaperCommand],
       };
     } else {
-      // If it exists, update the commands array
-      const existingCommands =
-        channelData[`${channelName}-wallpaper`].commands || [];
-      const commandIndex = existingCommands.findIndex((cmd) =>
-        cmd.startsWith(
-          "DISPLAY:0 gsettings set org.gnome.desktop.background picture-uri"
-        )
+      // Find the index of the existing gsettings command
+      const existingCommandIndex = channelData[`${channelName}-wallpaper`].commands.findIndex(
+        (command) => command.startsWith(wallpaperCommandPrefix)
       );
 
-      if (commandIndex !== -1) {
-        // Update the existing wallpaper command
-        channelData[`${channelName}-wallpaper`].commands[commandIndex] =
-          wallpaperCommand;
+      if (existingCommandIndex !== -1) {
+        // Update the existing gsettings command with the new URL
+        channelData[`${channelName}-wallpaper`].commands[existingCommandIndex] = wallpaperCommand;
       } else {
-        // Append a new wallpaper command if not found
+        // Append the new wallpaper command if not found
         channelData[`${channelName}-wallpaper`].commands.push(wallpaperCommand);
       }
-
-      // Update the wallpaper name if necessary
-      channelData[`${channelName}-wallpaper`].name = channelName;
     }
 
     // Write the updated channel data back to the JSON file
@@ -519,10 +512,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       console.error("Error writing channels:", error);
       return res
         .status(500)
-        .json({
-          message: "Failed to write channel data",
-          error: error.message,
-        });
+        .json({ message: "Failed to write channel data", error: error.message });
     }
 
     // Respond with success and the uploaded image URL
@@ -532,11 +522,11 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     });
   } catch (error) {
     console.error("Error uploading image:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to upload image", error: error.message });
+    res.status(500).json({ message: "Failed to upload image", error: error.message });
   }
 });
+
+
 
 // Get wallpaper commands by channel name
 app.get("/wallpaper/:channelName", async (req, res) => {
