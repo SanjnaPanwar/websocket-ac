@@ -245,32 +245,37 @@ app.post("/database-sync", async (req, res) => {
     return res.status(400).json({ message: "No data provided" });
   }
 
+  const clientsData = [];
+  const trackingData = [];
+
   try {
+    // Prepare data for bulk insert/update
     for (const { mac_address, active_time, date, location, username } of rows) {
-      const clientQuery = `
-        INSERT INTO sama_clients (name, mac_address)
-        SELECT $1, $2 WHERE NOT EXISTS (
-          SELECT 1 FROM sama_clients WHERE mac_address = $2
-        )`;
-      await db.none(clientQuery, [username, mac_address]);
+      // Collect data for clients upsert
+      clientsData.push([username, mac_address]);
 
-      const existingRow = await db.oneOrNone(
-        `SELECT active_time FROM sama_system_tracking WHERE mac_address = $1 AND "date" = $2`,
-        [mac_address, date]
-      );
-
-      if (existingRow) {
-        await db.none(
-          `UPDATE sama_system_tracking SET active_time = $1, location = $2 WHERE mac_address = $3 AND "date" = $4`,
-          [active_time, location, mac_address, date]
-        );
-      } else {
-        await db.none(
-          `INSERT INTO sama_system_tracking (mac_address, active_time, "date", location) VALUES ($1, $2, $3, $4)`,
-          [mac_address, active_time, date, location]
-        );
-      }
+      // Collect data for tracking table
+      trackingData.push([mac_address, active_time, date, location]);
     }
+
+    // Start a transaction
+    await db.tx(async (t) => {
+      // Bulk insert/update clients with ON CONFLICT for last_sync update
+      const clientQuery = `
+        INSERT INTO sama_clients (name, mac_address, last_sync)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (mac_address) DO UPDATE
+        SET last_sync = EXCLUDED.last_sync`;
+      await t.none(db.helpers.insert(clientsData, ['name', 'mac_address'], 'sama_clients') + ' ON CONFLICT (mac_address) DO UPDATE SET last_sync = NOW()');
+
+      // Bulk insert/update tracking data
+      const trackingQuery = `
+        INSERT INTO sama_system_tracking (mac_address, active_time, "date", location)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (mac_address, "date") DO UPDATE
+        SET active_time = EXCLUDED.active_time, location = EXCLUDED.location`;
+      await t.none(db.helpers.insert(trackingData, ['mac_address', 'active_time', 'date', 'location'], 'sama_system_tracking') + ' ON CONFLICT (mac_address, "date") DO UPDATE SET active_time = EXCLUDED.active_time, location = EXCLUDED.location');
+    });
 
     res.json({ message: "Database synchronized successfully" });
   } catch (err) {
@@ -278,6 +283,7 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
+
 
 // Helper function to write to the JSON file
 async function writeChannels(channels) {
@@ -408,11 +414,15 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const channelData = await readChannels();
 
     // Prepare the wallpaper command
-    const wallpaperCommandPrefix = "gsettings set org.gnome.desktop.background picture-uri";
+    const wallpaperCommandPrefix =
+      "gsettings set org.gnome.desktop.background picture-uri";
     const wallpaperCommand = `${wallpaperCommandPrefix} '${uploadedImage}'`;
 
     // Check if the provided channel exists and has a commands array
-    if (channelData[channelName] && Array.isArray(channelData[channelName].commands)) {
+    if (
+      channelData[channelName] &&
+      Array.isArray(channelData[channelName].commands)
+    ) {
       // Find the index of the existing gsettings command
       const existingCommandIndex = channelData[channelName].commands.findIndex(
         (command) => command.startsWith(wallpaperCommandPrefix)
@@ -420,7 +430,8 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 
       if (existingCommandIndex !== -1) {
         // Update the existing gsettings command with the new URL
-        channelData[channelName].commands[existingCommandIndex] = wallpaperCommand;
+        channelData[channelName].commands[existingCommandIndex] =
+          wallpaperCommand;
       } else {
         // If not found, push the new wallpaper command
         channelData[channelName].commands.push(wallpaperCommand);
@@ -433,7 +444,9 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     await writeChannels(channelData);
   } catch (error) {
     console.error("Error uploading image:", error);
-    res.status(500).json({ message: "Failed to upload image", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to upload image", error: error.message });
   }
 });
 
@@ -526,8 +539,6 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 //   }
 // });
 
-
-
 // Get wallpaper commands by channel name
 app.get("/wallpaper/:channelName", async (req, res) => {
   try {
@@ -539,7 +550,9 @@ app.get("/wallpaper/:channelName", async (req, res) => {
       channelData = await readChannels();
     } catch (error) {
       console.error("Error reading channels:", error);
-      return res.status(500).json({ message: "Failed to read channel data", error: error.message });
+      return res
+        .status(500)
+        .json({ message: "Failed to read channel data", error: error.message });
     }
 
     // Find the channel's wallpaper section
@@ -553,13 +566,13 @@ app.get("/wallpaper/:channelName", async (req, res) => {
     const wallpaperData = {
       type: channelData[wallpaperKey].type || "wallpaper",
       name: channelData[wallpaperKey].name || `${channelName}-wallpaper`,
-      commands: channelData[wallpaperKey].commands || []
+      commands: channelData[wallpaperKey].commands || [],
     };
 
     // Send the response using shorthand syntax for dynamic key
     res.status(200).json({
       message: "Wallpaper data retrieved successfully",
-      [wallpaperKey]: wallpaperData
+      [wallpaperKey]: wallpaperData,
     });
   } catch (error) {
     console.error("Error retrieving wallpaper data:", error);
@@ -569,4 +582,3 @@ app.get("/wallpaper/:channelName", async (req, res) => {
     });
   }
 });
-
