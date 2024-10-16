@@ -237,7 +237,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
   }
 });
 
-// Endpoint to handle database sync via JSON data
+//
 app.post("/database-sync", async (req, res) => {
   const { data: rows } = req.body;
 
@@ -245,37 +245,45 @@ app.post("/database-sync", async (req, res) => {
     return res.status(400).json({ message: "No data provided" });
   }
 
-  const clientsData = [];
-  const trackingData = [];
-
   try {
-    // Prepare data for bulk insert/update
     for (const { mac_address, active_time, date, location, username } of rows) {
-      // Collect data for clients upsert
-      clientsData.push([username, mac_address]);
-
-      // Collect data for tracking table
-      trackingData.push([mac_address, active_time, date, location]);
-    }
-
-    // Start a transaction
-    await db.tx(async (t) => {
-      // Bulk insert/update clients with ON CONFLICT for last_sync update
-      const clientQuery = `
+      // Insert or update client, and set last_sync to the current time
+      await db.none(
+        `
         INSERT INTO sama_clients (name, mac_address, last_sync)
         VALUES ($1, $2, NOW())
-        ON CONFLICT (mac_address) DO UPDATE
-        SET last_sync = EXCLUDED.last_sync`;
-      await t.none(db.helpers.insert(clientsData, ['name', 'mac_address'], 'sama_clients') + ' ON CONFLICT (mac_address) DO UPDATE SET last_sync = NOW()');
+        ON CONFLICT (mac_address)
+        DO UPDATE SET last_sync = NOW(), name = EXCLUDED.name
+      `,
+        [username, mac_address]
+      );
 
-      // Bulk insert/update tracking data
-      const trackingQuery = `
-        INSERT INTO sama_system_tracking (mac_address, active_time, "date", location)
-        VALUES ($1, $2, $3, $4)
-        ON CONFLICT (mac_address, "date") DO UPDATE
-        SET active_time = EXCLUDED.active_time, location = EXCLUDED.location`;
-      await t.none(db.helpers.insert(trackingData, ['mac_address', 'active_time', 'date', 'location'], 'sama_system_tracking') + ' ON CONFLICT (mac_address, "date") DO UPDATE SET active_time = EXCLUDED.active_time, location = EXCLUDED.location');
-    });
+      // Check if there's an existing tracking record for this mac_address and date
+      const existingRow = await db.oneOrNone(
+        `SELECT active_time FROM sama_system_tracking WHERE mac_address = $1 AND "date" = $2`,
+        [mac_address, date]
+      );
+
+      if (existingRow) {
+        // Update tracking data and last_sync in sama_clients when a tracking record exists
+        await db.tx(async (t) => {
+          await t.none(
+            `UPDATE sama_system_tracking SET active_time = $1, location = $2 WHERE mac_address = $3 AND "date" = $4`,
+            [active_time, location, mac_address, date]
+          );
+          await t.none(
+            `UPDATE sama_clients SET last_sync = NOW() WHERE mac_address = $1`,
+            [mac_address]
+          );
+        });
+      } else {
+        // Insert new tracking data
+        await db.none(
+          `INSERT INTO sama_system_tracking (mac_address, active_time, "date", location) VALUES ($1, $2, $3, $4)`,
+          [mac_address, active_time, date, location]
+        );
+      }
+    }
 
     res.json({ message: "Database synchronized successfully" });
   } catch (err) {
@@ -283,7 +291,6 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
-
 
 // Helper function to write to the JSON file
 async function writeChannels(channels) {
