@@ -148,16 +148,39 @@ const sendCommandsToClient = (client, channelData, channel) => {
   }
 };
 
-// API to fetch all clients
+// API to fetch clients
 app.get("/clients", async (req, res) => {
+  const { page = 0, limit = 20 } = req.query; // Default to page 0 and limit 20
+
+  const offset = page * limit;
+
   try {
-    const clients = await db.any("SELECT * FROM sama_clients LIMIT 10");
-    res.status(200).send({ message: "Clients fetched successfully.", clients });
-  } catch (error) {
-    console.error("[API] Error fetching clients:", error);
-    res
-      .status(500)
-      .send({ message: "Error fetching clients", error: error.message });
+    const clients = await db.any(
+      `SELECT id, name, mac_address, software_installed, wallpaper_changed, created_at, last_sync
+       FROM sama_clients
+       ORDER BY created_at DESC
+       LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+
+    const totalClients = await db.one(
+      `SELECT COUNT(*) FROM sama_clients`,
+      [],
+      (c) => +c.count
+    ); // Fetch total number of clients for pagination metadata
+
+    res.json({
+      data: clients,
+      pagination: {
+        total: totalClients,
+        page: +page, // Current page number
+        limit: +limit, // Number of items per page
+        totalPages: Math.ceil(totalClients / limit),
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching clients:", err.message);
+    res.status(500).json({ message: "Failed to fetch clients" });
   }
 });
 
@@ -237,7 +260,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
   }
 });
 
-//
+//systems traking API
 app.post("/database-sync", async (req, res) => {
   const { data: rows } = req.body;
 
