@@ -208,6 +208,35 @@ app.post("/client/create", async (req, res) => {
   }
 });
 
+// Get last_sync for a specific client using mac_address
+app.get("/clients/:mac_address/last-sync", async (req, res) => {
+  const { mac_address } = req.params;
+
+  try {
+    // Select only necessary fields (e.g., last_sync)
+    const client = await db.oneOrNone(
+      `SELECT last_sync
+       FROM sama_clients 
+       WHERE TRIM(mac_address) ILIKE TRIM($1)
+       LIMIT 1`,
+      [mac_address]
+    );
+
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    res.json({
+      message: "Last sync data retrieved successfully",
+      last_sync: client.last_sync,
+    });
+  } catch (err) {
+    console.error("Error fetching client last sync data:", err.message);
+    res.status(500).json({ message: "Failed to fetch last sync data" });
+  }
+});
+
+
 // API to update software status
 app.put("/client/update/software-status", async (req, res) => {
   const { mac_address } = req.body;
@@ -262,7 +291,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
 
 //systems traking API
 app.post("/database-sync", async (req, res) => {
-  const { data: rows } = req.body;
+  const { data: rows } = req.body;  
 
   if (!rows?.length) {
     return res.status(400).json({ message: "No data provided" });
@@ -270,6 +299,7 @@ app.post("/database-sync", async (req, res) => {
 
   try {
     for (const { mac_address, active_time, date, location, username } of rows) {
+      
       // Insert or update client, and set last_sync to the current time
       await db.none(
         `
