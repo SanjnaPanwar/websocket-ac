@@ -148,6 +148,30 @@ const sendCommandsToClient = (client, channelData, channel) => {
   }
 };
 
+// API to create a new client
+app.post("/client/create", async (req, res) => {
+  const { name, mac_address } = req.body;
+
+  try {
+    const newClient = await db.one(
+      "INSERT INTO sama_clients (name, mac_address) VALUES ($1, $2) RETURNING *",
+      [name, mac_address]
+    );
+    res
+      .status(200)
+      .send({ message: "Client created successfully.", client: newClient });
+  } catch (error) {
+    console.error("[API] Error creating client:", error);
+    const errorMessage =
+      error.code === "23505"
+        ? "Client with the same name already exists."
+        : "Error creating client.";
+    res
+      .status(error.code === "23505" ? 400 : 500)
+      .send({ message: errorMessage, error: error.message });
+  }
+});
+
 // API to fetch clients
 app.get("/clients", async (req, res) => {
   const { page = 0, limit = 20 } = req.query; // Default to page 0 and limit 20
@@ -184,29 +208,38 @@ app.get("/clients", async (req, res) => {
   }
 });
 
-// API to create a new client
-app.post("/client/create", async (req, res) => {
-  const { name, mac_address } = req.body;
+// API to fetch tracking data by mac_address
+app.get("/tracking/:mac_address", async (req, res) => {
+  const { mac_address } = req.params;
 
   try {
-    const newClient = await db.one(
-      "INSERT INTO sama_clients (name, mac_address) VALUES ($1, $2) RETURNING *",
-      [name, mac_address]
+    // Query to join both tables and fetch tracking data by mac_address
+    const trackingData = await db.any(
+      `
+      SELECT st.*, c.name as client_name, c.last_sync
+      FROM sama_system_tracking st
+      JOIN sama_clients c ON st.mac_address = c.mac_address
+      WHERE st.mac_address ILIKE $1
+      ORDER BY st.date DESC
+      `,
+      [mac_address]
     );
-    res
-      .status(200)
-      .send({ message: "Client created successfully.", client: newClient });
-  } catch (error) {
-    console.error("[API] Error creating client:", error);
-    const errorMessage =
-      error.code === "23505"
-        ? "Client with the same name already exists."
-        : "Error creating client.";
-    res
-      .status(error.code === "23505" ? 400 : 500)
-      .send({ message: errorMessage, error: error.message });
+
+    if (trackingData.length === 0) {
+      return res.status(404).json({ message: "No tracking data found for this client" });
+    }
+
+    // Send the result back to the client
+    res.json({
+      message: "Tracking data retrieved successfully",
+      data: trackingData,
+    });
+  } catch (err) {
+    console.error("Error fetching tracking data:", err.message);
+    res.status(500).json({ message: "Failed to fetch tracking data" });
   }
 });
+
 
 // Get last_sync for a specific client using mac_address
 app.get("/clients/:mac_address/last-sync", async (req, res) => {
