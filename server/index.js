@@ -64,6 +64,8 @@ app.use(
   })
 );
 
+//************** HELPER FUNCTIONS **************//
+
 // Function to read channels from JSON file
 const readChannels = async () => {
   try {
@@ -73,6 +75,62 @@ const readChannels = async () => {
     console.error("Error reading channels:", err.message);
     throw new Error("Failed to read channels");
   }
+};
+
+// Helper function to write to the JSON file
+async function writeChannels(channels) {
+  try {
+    await fs.writeFile(filePath, JSON.stringify(channels, null, 2), "utf8");
+  } catch (err) {
+    console.error("Error writing to JSON file:", err);
+    throw new Error("Could not write channels");
+  }
+}
+
+// Function to send commands to a single client when they subscribe
+const sendCommandsToClient = (client, channelData, channel) => {
+  const channelMeta = channelData[channel];
+  console.log(channelMeta, "channelMeta");
+
+  if (channelMeta) {
+    const message = {
+      type: channelMeta.type,
+      name: channelMeta.name,
+      commands: channelMeta.commands,
+    };
+
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(message)); // Send the command as JSON to the client
+    }
+    console.log(`[Server] Commands sent to client for channel: ${channel}`);
+  }
+};
+
+//Clients traking data
+const getTrackingDataByMacAddress = async (mac_address) => {
+  try {
+    // Query to join both tables and fetch tracking data by mac_address
+    const trackingData = await db.any(
+      `
+      SELECT st.*, c.name as client_name, c.last_sync
+      FROM sama_system_tracking st
+      JOIN sama_clients c ON st.mac_address = c.mac_address
+      WHERE st.mac_address ILIKE $1
+      ORDER BY st.date DESC
+      `,
+      [mac_address]
+    );
+
+    return trackingData;
+  } catch (err) {
+    throw new Error("Failed to fetch tracking data: " + err.message);
+  }
+};
+
+// Function to calculate total active time from tracking data
+const calculateTotalActiveTime = (trackingData) => {
+  // Calculate the sum of active_time values from the tracking data array
+  return trackingData.reduce((total, entry) => total + entry.active_time, 0);
 };
 
 // Structure to store channel subscriptions
@@ -129,24 +187,7 @@ wss.on("connection", async (ws) => {
   });
 });
 
-// Function to send commands to a single client when they subscribe
-const sendCommandsToClient = (client, channelData, channel) => {
-  const channelMeta = channelData[channel];
-  console.log(channelMeta, "channelMeta");
-
-  if (channelMeta) {
-    const message = {
-      type: channelMeta.type,
-      name: channelMeta.name,
-      commands: channelMeta.commands,
-    };
-
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(message)); // Send the command as JSON to the client
-    }
-    console.log(`[Server] Commands sent to client for channel: ${channel}`);
-  }
-};
+//************** ROUTES **************//
 
 // API to create a new client
 app.post("/client/create", async (req, res) => {
@@ -175,26 +216,40 @@ app.post("/client/create", async (req, res) => {
 // API to fetch clients
 app.get("/clients", async (req, res) => {
   const { page = 0, limit = 20 } = req.query; // Default to page 0 and limit 20
-
   const offset = page * limit;
 
   try {
+    // Fetch clients with pagination
     const clients = await db.any(
-      `SELECT id, name, mac_address, software_installed, wallpaper_changed, created_at, last_sync
+      `SELECT *
        FROM sama_clients
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
 
+    // Fetch total number of clients for pagination metadata
     const totalClients = await db.one(
       `SELECT COUNT(*) FROM sama_clients`,
       [],
       (c) => +c.count
-    ); // Fetch total number of clients for pagination metadata
+    );
 
+    // Iterate over each client and fetch tracking data + total active time
+    const clientsWithActiveTime = await Promise.all(
+      clients.map(async (client) => {
+        const trackingData = await getTrackingDataByMacAddress(client.mac_address);
+        const total_active_time = calculateTotalActiveTime(trackingData);
+        return {
+          ...client,
+          total_active_time,
+        };
+      })
+    );
+
+    // Send the final response
     res.json({
-      data: clients,
+      data: clientsWithActiveTime,
       pagination: {
         total: totalClients,
         page: +page, // Current page number
@@ -208,25 +263,19 @@ app.get("/clients", async (req, res) => {
   }
 });
 
+
 // API to fetch tracking data by mac_address
 app.get("/tracking/:mac_address", async (req, res) => {
   const { mac_address } = req.params;
 
   try {
-    // Query to join both tables and fetch tracking data by mac_address
-    const trackingData = await db.any(
-      `
-      SELECT st.*, c.name as client_name, c.last_sync
-      FROM sama_system_tracking st
-      JOIN sama_clients c ON st.mac_address = c.mac_address
-      WHERE st.mac_address ILIKE $1
-      ORDER BY st.date DESC
-      `,
-      [mac_address]
-    );
+    // Call the function to fetch tracking data
+    const trackingData = await getTrackingDataByMacAddress(mac_address);
 
     if (trackingData.length === 0) {
-      return res.status(404).json({ message: "No tracking data found for this client" });
+      return res
+        .status(404)
+        .json({ message: "No tracking data found for this client" });
     }
 
     // Send the result back to the client
@@ -239,7 +288,6 @@ app.get("/tracking/:mac_address", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch tracking data" });
   }
 });
-
 
 // Get last_sync for a specific client using mac_address
 app.get("/clients/:mac_address/last-sync", async (req, res) => {
@@ -268,7 +316,6 @@ app.get("/clients/:mac_address/last-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch last sync data" });
   }
 });
-
 
 // API to update software status
 app.put("/client/update/software-status", async (req, res) => {
@@ -324,7 +371,7 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
 
 //systems traking API
 app.post("/database-sync", async (req, res) => {
-  const { data: rows } = req.body;  
+  const { data: rows } = req.body;
 
   if (!rows?.length) {
     return res.status(400).json({ message: "No data provided" });
@@ -332,7 +379,6 @@ app.post("/database-sync", async (req, res) => {
 
   try {
     for (const { mac_address, active_time, date, location, username } of rows) {
-      
       // Insert or update client, and set last_sync to the current time
       await db.none(
         `
@@ -377,16 +423,6 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
-
-// Helper function to write to the JSON file
-async function writeChannels(channels) {
-  try {
-    await fs.writeFile(filePath, JSON.stringify(channels, null, 2), "utf8");
-  } catch (err) {
-    console.error("Error writing to JSON file:", err);
-    throw new Error("Could not write channels");
-  }
-}
 
 // Get all channels from JSON
 app.get("/channels", async (req, res) => {
@@ -633,6 +669,7 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 // });
 
 // Get wallpaper commands by channel name
+
 app.get("/wallpaper/:channelName", async (req, res) => {
   try {
     const { channelName } = req.params;
