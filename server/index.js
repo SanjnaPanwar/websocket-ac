@@ -90,7 +90,6 @@ async function writeChannels(channels) {
 // Function to send commands to a single client when they subscribe
 const sendCommandsToClient = (client, channelData, channel) => {
   const channelMeta = channelData[channel];
-  console.log(channelMeta, "channelMeta");
 
   if (channelMeta) {
     const message = {
@@ -133,6 +132,94 @@ const calculateTotalActiveTime = (trackingData) => {
   return trackingData.reduce((total, entry) => total + entry.active_time, 0);
 };
 
+// Function to update software status in the `sama_client` table
+async function updateSoftwareStatus(mac_address, status, name) {
+  const query = `UPDATE sama_client SET status = ?, installed_software = ? WHERE mac_address = ?`;
+  const values = [status, name, mac_address];
+
+  try {
+    await db.execute(query, values);
+    console.log(`[DB] Software status updated for MAC: ${mac_address}`);
+  } catch (error) {
+    console.error("[DB] Error updating software status:", error);
+    throw error;
+  }
+}
+
+// Function to update wallpaper status in the `sama_client` table
+async function updateWallpaperStatus(mac_address, status) {
+  const query = `UPDATE sama_client SET wallpaper_status = ? WHERE mac_address = ?`;
+  const values = [status, mac_address];
+
+  try {
+    await db.execute(query, values);
+    console.log("[DB] Wallpaper status updated.");
+  } catch (error) {
+    console.error("[DB] Error updating wallpaper status:", error);
+    throw error;
+  }
+}
+
+// Main message processor
+async function processMessage(ws, parsedMessage, channelData) {
+  switch (parsedMessage.type) {
+    case "subscribe":
+      handleSubscription(ws, parsedMessage, channelData);
+      break;
+    case "software":
+      await handleSoftwareUpdate(parsedMessage);
+      break;
+    case "wallpaper":
+      await handleWallpaperUpdate(parsedMessage);
+      break;
+    default:
+      console.error("[Service] Unknown message type:", parsedMessage.type);
+      ws.send(JSON.stringify({ error: "Unknown message type" }));
+  }
+}
+
+function handleSubscription(ws, parsedMessage, channelData) {
+  const { channels: requestedChannels } = parsedMessage;
+
+  requestedChannels.forEach((channel) => {
+    if (!channelClients[channel]) {
+      channelClients[channel] = new Set();
+    }
+    channelClients[channel].add(ws); // Add client to the channel's Set
+
+    // Send commands to the new client subscribing to this channel
+    sendCommandsToClient(ws, channelData, channel);
+  });
+
+  ws.subscribedChannels = requestedChannels; // Store subscribed channels
+}
+
+// Function to handle software updates
+async function handleSoftwareUpdate(message) {
+  const { mac_address, status, installed_software } = message;
+
+  // Validate data
+  if (!mac_address || typeof status !== "boolean" || !installed_software) {
+    throw new Error("Invalid software message data");
+  }
+
+  // Update the database using mac_address
+  await updateSoftwareStatus(mac_address, status, installed_software);
+}
+
+// Function to handle wallpaper updates
+async function handleWallpaperUpdate(message) {
+  const { mac_address, status } = message;
+
+  // Validate data
+  if (!mac_address || typeof status !== "boolean") {
+    throw new Error("Invalid wallpaper message data");
+  }
+
+  // Update the database based on mac_address
+  await updateWallpaperStatus(mac_address, status);
+}
+
 // Structure to store channel subscriptions
 const channelClients = {};
 
@@ -143,31 +230,17 @@ wss.on("connection", async (ws) => {
   // Fetch channels data once at the start
   const channelData = await readChannels();
 
-  ws.on("message", (message) => {
+  ws.on("message", async (message) => {
     try {
       const parsedMessage = JSON.parse(message);
 
-      // Handle channel subscription
-      if (parsedMessage.type === "subscribe") {
-        const { channels: requestedChannels } = parsedMessage;
-
-        requestedChannels.forEach((channel) => {
-          if (!channelClients[channel]) {
-            channelClients[channel] = new Set();
-          }
-          channelClients[channel].add(ws); // Add client to the channel's Set
-
-          // Send commands to the new client subscribing to this channel
-          sendCommandsToClient(ws, channelData, channel);
-        });
-
-        ws.subscribedChannels = requestedChannels; // Store subscribed channels
-      }
+      // Pass the parsed message to the message service
+      await processMessage(ws, parsedMessage, channelData);
 
       console.log(`[Server] Received message from client: ${message}`);
     } catch (err) {
       console.error("[Server] Error parsing message:", err.message);
-      ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Optional: notify the client
+      ws.send(JSON.stringify({ error: "Invalid JSON format" })); // Notify the client
     }
   });
 
@@ -238,7 +311,9 @@ app.get("/clients", async (req, res) => {
     // Iterate over each client and fetch tracking data + total active time
     const clientsWithActiveTime = await Promise.all(
       clients.map(async (client) => {
-        const trackingData = await getTrackingDataByMacAddress(client.mac_address);
+        const trackingData = await getTrackingDataByMacAddress(
+          client.mac_address
+        );
         const total_active_time = calculateTotalActiveTime(trackingData);
         return {
           ...client,
@@ -262,7 +337,6 @@ app.get("/clients", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch clients" });
   }
 });
-
 
 // API to fetch tracking data by mac_address
 app.get("/tracking/:mac_address", async (req, res) => {
