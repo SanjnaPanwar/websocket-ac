@@ -162,6 +162,8 @@ async function updateWallpaperStatus(mac_address, status) {
 
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
+  console.log("[Service] Processing message:", parsedMessage);
+  
   switch (parsedMessage.type) {
     case "subscribe":
       handleSubscription(ws, parsedMessage, channelData);
@@ -173,8 +175,7 @@ async function processMessage(ws, parsedMessage, channelData) {
       await handleWallpaperUpdate(parsedMessage);
       break;
     default:
-      console.error("[Service] Unknown message type:", parsedMessage.type);
-      ws.send(JSON.stringify({ error: "Unknown message type" }));
+      break;
   }
 }
 
