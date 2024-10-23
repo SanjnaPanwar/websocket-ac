@@ -134,21 +134,12 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
-  console.log(
-    "macAddress",
-    macAddress,
-    "installedSoftware",
-    installedSoftware,
-    "status",
-    status,
-    "--------->"
-  );
 
   // Update query to insert or append software and update software_installed status
   const sql = `
     UPDATE sama_clients
     SET
-      software_installed = $1,
+      software_status = $1,
       installed_software = 
         CASE 
           WHEN installed_software IS NULL OR installed_software = '' THEN $2
@@ -172,7 +163,7 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
 
 // Function to update wallpaper status in the `sama_client` table
 async function updateWallpaperStatus(macAddress, status) {
-  const query = `UPDATE sama_clients SET wallpaper_changed = $1 WHERE mac_address = $2`;
+  const query = `UPDATE sama_clients SET wallpaper_status = $1 WHERE mac_address = $2`;
   const values = [status, macAddress];
 
   try {
@@ -234,8 +225,6 @@ function handleSubscription(ws, parsedMessage, channelData) {
 
 // Function to handle software updates
 async function handleSoftwareUpdate(message) {
-  console.log("message-----handlaer", message);
-
   const { mac_address, status, installed_software } = message;
 
   // Validate data
@@ -488,6 +477,8 @@ app.put("/client/update/wallpaper-status", async (req, res) => {
 //systems traking API
 app.post("/database-sync", async (req, res) => {
   const { data: rows } = req.body;
+  console.log(rows);
+  
 
   if (!rows?.length) {
     return res.status(400).json({ message: "No data provided" });
