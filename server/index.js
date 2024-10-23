@@ -177,7 +177,7 @@ async function processMessage(ws, parsedMessage, channelData) {
     }
   } else if (parsedMessage) {
     // Check if parsedMessage is valid
-    await processSingleMessage(ws, parsedMessage); // Process a single message type
+    await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
   } else {
     console.error("[Service] Invalid message format:", parsedMessage);
   }
