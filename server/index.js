@@ -134,7 +134,7 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
-  const sql = `UPDATE software SET status = ? WHERE mac_address = ? AND installed_software = ?`;
+  const sql = `UPDATE sama_clients SET status = ? WHERE mac_address = ? AND installed_software = ?`;
 
   db.run(sql, [status, macAddress, installedSoftware], function (err) {
     if (err) {
@@ -149,7 +149,7 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
 
 // Function to update wallpaper status in the `sama_client` table
 async function updateWallpaperStatus(macAddress, status) {
-  const query = `UPDATE sama_client SET wallpaper_status = ? WHERE mac_address = ?`;
+  const query = `UPDATE sama_clients SET wallpaper_status = ? WHERE mac_address = ?`;
   const values = [status, macAddress];
 
   try {
@@ -175,12 +175,9 @@ async function processMessage(ws, parsedMessage, channelData) {
     for (const message of parsedMessage) {
       await processSingleMessage(ws, message, channelData); // Process each message type
     }
-  } else if (parsedMessage) {
-    // Check if parsedMessage is valid
-    await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
-  } else {
-    console.error("[Service] Invalid message format:", parsedMessage);
   }
+  // Check if parsedMessage is valid
+  else await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
 }
 
 // Function to handle each individual message type
