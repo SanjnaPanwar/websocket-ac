@@ -97,7 +97,6 @@ const sendCommandsToClient = (client, channelData, channel) => {
       name: channelMeta.name,
       commands: channelMeta.commands,
     };
-    console.log("message", message, "--------commmnds send to client ");
 
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message)); // Send the command as JSON to the client
@@ -178,7 +177,7 @@ async function processMessage(ws, parsedMessage, channelData) {
     }
   } else if (parsedMessage) {
     // Check if parsedMessage is valid
-    await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
+    await processSingleMessage(ws, parsedMessage); // Process a single message type
   } else {
     console.error("[Service] Invalid message format:", parsedMessage);
   }
@@ -199,7 +198,7 @@ async function processSingleMessage(ws, message, channelData) {
       await handleWallpaperUpdate(message);
       break;
     default:
-      console.error("[Service] Unknown message type:", message.type);
+      // console.error("[Service] Unknown message type:", message.type);
       break;
   }
 }
