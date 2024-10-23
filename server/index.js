@@ -134,14 +134,36 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
+  console.log(
+    "macAddress",
+    macAddress,
+    "installedSoftware",
+    installedSoftware,
+    "status",
+    status,
+    "--------->"
+  );
 
-  console.log("macAddress", macAddress, "installedSoftware", installedSoftware, "status", status,"--------->");
-  
-  const sql = `UPDATE sama_clients SET software_installed = $1 WHERE mac_address = $2 AND installed_software = $3`;
+  // Update query to insert or append software and update software_installed status
+  const sql = `
+    UPDATE sama_clients
+    SET
+      software_installed = $1,
+      installed_software = 
+        CASE 
+          WHEN installed_software IS NULL OR installed_software = '' THEN $2
+          WHEN POSITION($2 in installed_software) = 0 THEN CONCAT(installed_software, ', ', $2)
+          ELSE installed_software
+        END
+    WHERE mac_address = $3
+  `;
 
-  db.none(sql, [status, macAddress, installedSoftware])
+  // Update the software status and installed software list based on mac_address
+  db.none(sql, [status, installedSoftware, macAddress])
     .then(() => {
-      console.log(`Updated software status for ${installedSoftware} on ${macAddress}`);
+      console.log(
+        `Updated software status for ${installedSoftware} on ${macAddress}`
+      );
     })
     .catch((err) => {
       console.error("[DB] Error updating software status:", err);
@@ -164,7 +186,6 @@ async function updateWallpaperStatus(macAddress, status) {
 
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
-
   // If the parsed message contains an array of actions (multiple types)
   if (Array.isArray(parsedMessage)) {
     for (const message of parsedMessage) {
@@ -177,7 +198,6 @@ async function processMessage(ws, parsedMessage, channelData) {
 
 // Function to handle each individual message type
 async function processSingleMessage(ws, message, channelData) {
-
   switch (message.type) {
     case "subscribe":
       handleSubscription(ws, message, channelData);
@@ -215,7 +235,7 @@ function handleSubscription(ws, parsedMessage, channelData) {
 // Function to handle software updates
 async function handleSoftwareUpdate(message) {
   console.log("message-----handlaer", message);
-  
+
   const { mac_address, status, installed_software } = message;
 
   // Validate data
