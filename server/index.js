@@ -97,7 +97,7 @@ const sendCommandsToClient = (client, channelData, channel) => {
       name: channelMeta.name,
       commands: channelMeta.commands,
     };
-console.log("message", message,'--------commmnds send to client '); 
+    console.log("message", message, "--------commmnds send to client ");
 
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message)); // Send the command as JSON to the client
@@ -133,7 +133,7 @@ const calculateTotalActiveTime = (trackingData) => {
   return trackingData.reduce((total, entry) => total + entry.active_time, 0);
 };
 
-// Function to update software status in the `sama_client` table
+/// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
   const sql = `UPDATE software SET status = ? WHERE mac_address = ? AND installed_software = ?`;
 
@@ -149,13 +149,18 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
 }
 
 // Function to update wallpaper status in the `sama_client` table
-async function updateWallpaperStatus(mac_address, status) {
+async function updateWallpaperStatus(macAddress, status) {
   const query = `UPDATE sama_client SET wallpaper_status = ? WHERE mac_address = ?`;
-  const values = [status, mac_address];
+  const values = [status, macAddress];
 
   try {
-    await db.execute(query, values);
-    console.log("[DB] Wallpaper status updated.");
+    db.run(query, values, function (err) {
+      if (err) {
+        console.error("[DB] Error updating wallpaper status:", err);
+      } else {
+        console.log("[DB] Wallpaper status updated.");
+      }
+    });
   } catch (error) {
     console.error("[DB] Error updating wallpaper status:", error);
     throw error;
@@ -171,15 +176,18 @@ async function processMessage(ws, parsedMessage, channelData) {
     for (const message of parsedMessage) {
       await processSingleMessage(ws, message, channelData); // Process each message type
     }
-  } else {
+  } else if (parsedMessage) {
+    // Check if parsedMessage is valid
     await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
+  } else {
+    console.error("[Service] Invalid message format:", parsedMessage);
   }
 }
 
 // Function to handle each individual message type
 async function processSingleMessage(ws, message, channelData) {
   console.log("[Service] Processing single message:", message);
-  
+
   switch (message.type) {
     case "subscribe":
       handleSubscription(ws, message, channelData);
@@ -191,7 +199,7 @@ async function processSingleMessage(ws, message, channelData) {
       await handleWallpaperUpdate(message);
       break;
     default:
-      // Do nothing for unknown message types
+      console.error("[Service] Unknown message type:", message.type);
       break;
   }
 }
@@ -228,11 +236,12 @@ async function handleSoftwareUpdate(message) {
 
   // Validate data
   if (!mac_address || typeof status !== "boolean" || !installed_software) {
-    throw new Error("Invalid software message data");
+    console.error("[Service] Invalid software message data:", message);
+    return;
   }
 
   // Update the database using mac_address
-  await updateSoftwareStatus(mac_address, status, installed_software);
+  await updateSoftwareStatus(mac_address, installed_software, status);
 }
 
 // Function to handle wallpaper updates
@@ -241,7 +250,8 @@ async function handleWallpaperUpdate(message) {
 
   // Validate data
   if (!mac_address || typeof status !== "boolean") {
-    throw new Error("Invalid wallpaper message data");
+    console.error("[Service] Invalid wallpaper message data:", message);
+    return;
   }
 
   // Update the database based on mac_address
