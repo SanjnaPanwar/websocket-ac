@@ -134,34 +134,25 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
-  console.log(`select * from sama_clients `);
-  
-  const sql = `UPDATE sama_clients SET software_installed = ? WHERE mac_address = ? AND installed_software = ?`;
+  const sql = `UPDATE sama_clients SET software_installed = $1 WHERE mac_address = $2 AND installed_software = $3`;
 
-  db.run(sql, [status, macAddress, installedSoftware], function (err) {
-    if (err) {
+  db.none(sql, [status, macAddress, installedSoftware])
+    .then(() => {
+      console.log(`Updated software status for ${installedSoftware} on ${macAddress}`);
+    })
+    .catch((err) => {
       console.error("[DB] Error updating software status:", err);
-    } else {
-      console.log(
-        `Updated software status for ${installedSoftware} on ${macAddress}`
-      );
-    }
-  });
+    });
 }
 
 // Function to update wallpaper status in the `sama_client` table
 async function updateWallpaperStatus(macAddress, status) {
-  const query = `UPDATE sama_clients SET wallpaper_changed = ? WHERE mac_address = ?`;
+  const query = `UPDATE sama_clients SET wallpaper_changed = $1 WHERE mac_address = $2`;
   const values = [status, macAddress];
 
   try {
-    db.run(query, values, function (err) {
-      if (err) {
-        console.error("[DB] Error updating wallpaper status:", err);
-      } else {
-        console.log("[DB] Wallpaper status updated.");
-      }
-    });
+    await db.none(query, values);
+    console.log("[DB] Wallpaper status updated.");
   } catch (error) {
     console.error("[DB] Error updating wallpaper status:", error);
     throw error;
