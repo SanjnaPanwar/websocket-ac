@@ -134,6 +134,8 @@ const calculateTotalActiveTime = (trackingData) => {
 
 // Function to update software status in the `sama_client` table
 async function updateSoftwareStatus(mac_address, status, name) {
+  console.log("UPDATE mac_address",mac_address,'------------status',status,'------------name',name);
+  
   const query = `UPDATE sama_client SET status = ?, installed_software = ? WHERE mac_address = ?`;
   const values = [status, name, mac_address];
 
@@ -162,7 +164,7 @@ async function updateWallpaperStatus(mac_address, status) {
 
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
-  console.log("[Service] Processing message:", parsedMessage);
+  console.log("[Service] Processing message:" );
   
   switch (parsedMessage.type) {
     case "subscribe":
@@ -198,6 +200,7 @@ function handleSubscription(ws, parsedMessage, channelData) {
 // Function to handle software updates
 async function handleSoftwareUpdate(message) {
   const { mac_address, status, installed_software } = message;
+console.log("mac_address",mac_address,'------------status',status,'------------installed_software',installed_software);
 
   // Validate data
   if (!mac_address || typeof status !== "boolean" || !installed_software) {
