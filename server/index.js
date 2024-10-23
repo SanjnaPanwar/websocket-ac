@@ -133,26 +133,18 @@ const calculateTotalActiveTime = (trackingData) => {
 };
 
 // Function to update software status in the `sama_client` table
-async function updateSoftwareStatus(mac_address, status, name) {
-  console.log(
-    "UPDATE mac_address",
-    mac_address,
-    "------------status",
-    status,
-    "------------name",
-    name
-  );
+function updateSoftwareStatus(macAddress, installedSoftware, status) {
+  const sql = `UPDATE software SET status = ? WHERE mac_address = ? AND installed_software = ?`;
 
-  const query = `UPDATE sama_client SET status = ?, installed_software = ? WHERE mac_address = ?`;
-  const values = [status, name, mac_address];
-
-  try {
-    await db.execute(query, values);
-    console.log(`[DB] Software status updated for MAC: ${mac_address}`);
-  } catch (error) {
-    console.error("[DB] Error updating software status:", error);
-    throw error;
-  }
+  db.run(sql, [status, macAddress, installedSoftware], function (err) {
+    if (err) {
+      console.error("[DB] Error updating software status:", err);
+    } else {
+      console.log(
+        `Updated software status for ${installedSoftware} on ${macAddress}`
+      );
+    }
+  });
 }
 
 // Function to update wallpaper status in the `sama_client` table
