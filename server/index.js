@@ -134,8 +134,15 @@ const calculateTotalActiveTime = (trackingData) => {
 
 // Function to update software status in the `sama_client` table
 async function updateSoftwareStatus(mac_address, status, name) {
-  console.log("UPDATE mac_address",mac_address,'------------status',status,'------------name',name);
-  
+  console.log(
+    "UPDATE mac_address",
+    mac_address,
+    "------------status",
+    status,
+    "------------name",
+    name
+  );
+
   const query = `UPDATE sama_client SET status = ?, installed_software = ? WHERE mac_address = ?`;
   const values = [status, name, mac_address];
 
@@ -164,25 +171,40 @@ async function updateWallpaperStatus(mac_address, status) {
 
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
-  console.log("[Service] Processing message:" );
-  
-  switch (parsedMessage.type) {
+  console.log("[Service] Processing message:", parsedMessage);
+
+  // If the parsed message contains an array of actions (multiple types)
+  if (Array.isArray(parsedMessage)) {
+    for (const message of parsedMessage) {
+      await processSingleMessage(ws, message, channelData); // Process each message type
+    }
+  } else {
+    await processSingleMessage(ws, parsedMessage, channelData); // Process a single message type
+  }
+}
+
+// Function to handle each individual message type
+async function processSingleMessage(ws, message, channelData) {
+  switch (message.type) {
     case "subscribe":
-      handleSubscription(ws, parsedMessage, channelData);
+      handleSubscription(ws, message, channelData);
       break;
     case "software":
-      await handleSoftwareUpdate(parsedMessage);
+      await handleSoftwareUpdate(message);
       break;
     case "wallpaper":
-      await handleWallpaperUpdate(parsedMessage);
+      await handleWallpaperUpdate(message);
       break;
     default:
+      // Do nothing for unknown message types
       break;
   }
 }
 
 function handleSubscription(ws, parsedMessage, channelData) {
   const { channels: requestedChannels } = parsedMessage;
+
+  console.log("[Service] Subscribing to channels:", requestedChannels);
 
   requestedChannels.forEach((channel) => {
     if (!channelClients[channel]) {
@@ -200,7 +222,14 @@ function handleSubscription(ws, parsedMessage, channelData) {
 // Function to handle software updates
 async function handleSoftwareUpdate(message) {
   const { mac_address, status, installed_software } = message;
-console.log("mac_address",mac_address,'------------status',status,'------------installed_software',installed_software);
+  console.log(
+    "mac_address",
+    mac_address,
+    "------------status",
+    status,
+    "------------installed_software",
+    installed_software
+  );
 
   // Validate data
   if (!mac_address || typeof status !== "boolean" || !installed_software) {
