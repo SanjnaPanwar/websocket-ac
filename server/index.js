@@ -97,6 +97,7 @@ const sendCommandsToClient = (client, channelData, channel) => {
       name: channelMeta.name,
       commands: channelMeta.commands,
     };
+console.log("message", message,'--------commmnds send to client '); 
 
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message)); // Send the command as JSON to the client
@@ -177,6 +178,8 @@ async function processMessage(ws, parsedMessage, channelData) {
 
 // Function to handle each individual message type
 async function processSingleMessage(ws, message, channelData) {
+  console.log("[Service] Processing single message:", message);
+  
   switch (message.type) {
     case "subscribe":
       handleSubscription(ws, message, channelData);
