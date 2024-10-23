@@ -134,6 +134,9 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
+
+  console.log("macAddress", macAddress, "installedSoftware", installedSoftware, "status", status,"--------->");
+  
   const sql = `UPDATE sama_clients SET software_installed = $1 WHERE mac_address = $2 AND installed_software = $3`;
 
   db.none(sql, [status, macAddress, installedSoftware])
@@ -161,7 +164,6 @@ async function updateWallpaperStatus(macAddress, status) {
 
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
-  console.log("[Service] Processing message:", parsedMessage);
 
   // If the parsed message contains an array of actions (multiple types)
   if (Array.isArray(parsedMessage)) {
@@ -175,7 +177,6 @@ async function processMessage(ws, parsedMessage, channelData) {
 
 // Function to handle each individual message type
 async function processSingleMessage(ws, message, channelData) {
-  console.log("[Service] Processing single message:", message);
 
   switch (message.type) {
     case "subscribe":
@@ -213,15 +214,9 @@ function handleSubscription(ws, parsedMessage, channelData) {
 
 // Function to handle software updates
 async function handleSoftwareUpdate(message) {
+  console.log("message-----handlaer", message);
+  
   const { mac_address, status, installed_software } = message;
-  console.log(
-    "mac_address",
-    mac_address,
-    "------------status",
-    status,
-    "------------installed_software",
-    installed_software
-  );
 
   // Validate data
   if (!mac_address || typeof status !== "boolean" || !installed_software) {
