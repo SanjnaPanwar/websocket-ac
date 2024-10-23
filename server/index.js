@@ -134,7 +134,9 @@ const calculateTotalActiveTime = (trackingData) => {
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
-  const sql = `UPDATE sama_clients SET status = ? WHERE mac_address = ? AND installed_software = ?`;
+  console.log(`select * from sama_clients `);
+  
+  const sql = `UPDATE sama_clients SET software_installed = ? WHERE mac_address = ? AND installed_software = ?`;
 
   db.run(sql, [status, macAddress, installedSoftware], function (err) {
     if (err) {
@@ -149,7 +151,7 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
 
 // Function to update wallpaper status in the `sama_client` table
 async function updateWallpaperStatus(macAddress, status) {
-  const query = `UPDATE sama_clients SET wallpaper_status = ? WHERE mac_address = ?`;
+  const query = `UPDATE sama_clients SET wallpaper_changed = ? WHERE mac_address = ?`;
   const values = [status, macAddress];
 
   try {
