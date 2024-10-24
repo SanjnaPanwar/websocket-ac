@@ -128,13 +128,26 @@ const getTrackingDataByMacAddress = async (mac_address) => {
 
 // Function to calculate total active time from tracking data
 const calculateTotalActiveTime = (trackingData) => {
-  // Calculate the sum of active_time values from the tracking data array
-  return trackingData.reduce((total, entry) => total + entry.active_time, 0);
+  // Reduce function to accumulate total seconds
+  const totalSeconds = trackingData.reduce((total, entry) => {
+    // Convert hh:mm:ss to total seconds
+    const [hours, minutes, seconds] = entry.active_time.split(":").map(Number);
+    return total + hours * 3600 + minutes * 60 + seconds;
+  }, 0);
+
+  // Convert total seconds back to hh:mm:ss
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  // Return in hh:mm:ss format
+  return [hours, minutes, seconds]
+    .map((unit) => String(unit).padStart(2, "0"))
+    .join(":");
 };
 
 /// Function to update software status in the `sama_client` table
 function updateSoftwareStatus(macAddress, installedSoftware, status) {
-
   // Update query to insert or append software and update software_installed status
   const sql = `
     UPDATE sama_clients
@@ -422,63 +435,10 @@ app.get("/clients/:mac_address/last-sync", async (req, res) => {
   }
 });
 
-// API to update software status
-app.put("/client/update/software-status", async (req, res) => {
-  const { mac_address } = req.body;
-
-  if (!mac_address) {
-    return res.status(400).send({ message: "mac_address is required." });
-  }
-
-  try {
-    const updatedClient = await db.one(
-      "UPDATE sama_clients SET software_installed = true WHERE mac_address = $1 RETURNING *",
-      [mac_address]
-    );
-    res.status(200).send({
-      message: "Software status updated successfully.",
-      client: updatedClient,
-    });
-  } catch (error) {
-    console.error("[API] Error updating software status:", error);
-    res.status(500).send({
-      message: "Error updating software status.",
-      error: error.message,
-    });
-  }
-});
-
-// API to update wallpaper status
-app.put("/client/update/wallpaper-status", async (req, res) => {
-  const { mac_address } = req.body;
-
-  if (!mac_address) {
-    return res.status(400).send({ message: "mac_address is required." });
-  }
-
-  try {
-    const updatedClient = await db.one(
-      "UPDATE sama_clients SET wallpaper_changed = true WHERE mac_address = $1 RETURNING *",
-      [mac_address]
-    );
-    res.status(200).send({
-      message: "Wallpaper status updated successfully.",
-      client: updatedClient,
-    });
-  } catch (error) {
-    console.error("[API] Error updating wallpaper status:", error);
-    res.status(500).send({
-      message: "Error updating wallpaper status.",
-      error: error.message,
-    });
-  }
-});
-
 //systems traking API
 app.post("/database-sync", async (req, res) => {
   const { data: rows } = req.body;
   console.log(rows);
-  
 
   if (!rows?.length) {
     return res.status(400).json({ message: "No data provided" });
@@ -683,139 +643,5 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to upload image", error: error.message });
-  }
-});
-
-// // // Image upload route for a single image
-// app.post("/upload", upload.single("image"), async (req, res) => {
-//   try {
-//     // Check if a file is uploaded
-//     if (!req.file) {
-//       return res.status(400).json({ message: "No file uploaded." });
-//     }
-
-//     // Extract the channel name from the request body
-//     const { channelName } = req.body;
-//     if (!channelName) {
-//       return res.status(400).json({ message: "Channel name is required." });
-//     }
-
-//     // Generate a unique filename for the S3 upload
-//     const fileName = `${uuidv4()}-${req.file.originalname}`;
-
-//     // S3 upload parameters
-//     const params = {
-//       Bucket: process.env.S3_BUCKET_NAME,
-//       Key: `sama_wallpaper/${fileName}`,
-//       Body: req.file.buffer,
-//       ContentType: req.file.mimetype,
-//       ACL: "public-read",
-//     };
-
-//     // Upload image to S3
-//     const data = await s3.upload(params).promise();
-//     const uploadedImage = data.Location;
-
-//     // Read existing channel data from the JSON file
-//     let channelData;
-//     try {
-//       channelData = await readChannels();
-//     } catch (error) {
-//       console.error("Error reading channels:", error);
-//       return res
-//         .status(500)
-//         .json({ message: "Failed to read channel data", error: error.message });
-//     }
-
-//     // Define the wallpaper command
-//     const wallpaperCommand = `gsettings set org.gnome.desktop.background picture-uri '${uploadedImage}'`;
-//     const wallpaperCommandPrefix = "gsettings set org.gnome.desktop.background picture-uri";
-
-//     // Check if the provided channel exists and has a commands array
-//     if (!channelData[`${channelName}-wallpaper`]) {
-//       // Create new channel if it doesn't exist
-//       channelData[`${channelName}-wallpaper`] = {
-//         type: "wallpaper",
-//         name: `${channelName}-wallpaper`,
-//         commands: [wallpaperCommand],
-//       };
-//     } else {
-//       // Find the index of the existing gsettings command
-//       const existingCommandIndex = channelData[`${channelName}-wallpaper`].commands.findIndex(
-//         (command) => command.startsWith(wallpaperCommandPrefix)
-//       );
-
-//       if (existingCommandIndex !== -1) {
-//         // Update the existing gsettings command with the new URL
-//         channelData[`${channelName}-wallpaper`].commands[existingCommandIndex] = wallpaperCommand;
-//       } else {
-//         // Append the new wallpaper command if not found
-//         channelData[`${channelName}-wallpaper`].commands.push(wallpaperCommand);
-//       }
-//     }
-
-//     // Write the updated channel data back to the JSON file
-//     try {
-//       await writeChannels(channelData);
-//     } catch (error) {
-//       console.error("Error writing channels:", error);
-//       return res
-//         .status(500)
-//         .json({ message: "Failed to write channel data", error: error.message });
-//     }
-
-//     // Respond with success and the uploaded image URL
-//     res.status(200).json({
-//       message: "Image uploaded successfully",
-//       imageUrl: uploadedImage,
-//     });
-//   } catch (error) {
-//     console.error("Error uploading image:", error);
-//     res.status(500).json({ message: "Failed to upload image", error: error.message });
-//   }
-// });
-
-// Get wallpaper commands by channel name
-
-app.get("/wallpaper/:channelName", async (req, res) => {
-  try {
-    const { channelName } = req.params;
-
-    // Read existing channel data from the JSON file
-    let channelData;
-    try {
-      channelData = await readChannels();
-    } catch (error) {
-      console.error("Error reading channels:", error);
-      return res
-        .status(500)
-        .json({ message: "Failed to read channel data", error: error.message });
-    }
-
-    // Find the channel's wallpaper section
-    const wallpaperKey = `${channelName}-wallpaper`;
-
-    if (!channelData[wallpaperKey]) {
-      return res.status(404).json({ message: "Channel not found" });
-    }
-
-    // Properly structure the response using shorthand properties
-    const wallpaperData = {
-      type: channelData[wallpaperKey].type || "wallpaper",
-      name: channelData[wallpaperKey].name || `${channelName}-wallpaper`,
-      commands: channelData[wallpaperKey].commands || [],
-    };
-
-    // Send the response using shorthand syntax for dynamic key
-    res.status(200).json({
-      message: "Wallpaper data retrieved successfully",
-      [wallpaperKey]: wallpaperData,
-    });
-  } catch (error) {
-    console.error("Error retrieving wallpaper data:", error);
-    res.status(500).json({
-      message: "Failed to retrieve wallpaper data",
-      error: error.message,
-    });
   }
 });
