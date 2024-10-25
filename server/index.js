@@ -153,15 +153,15 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
     UPDATE sama_clients
     SET
       software_status = $1,
-      installed_software = 
+      installed_softwares = 
         CASE 
-          WHEN installed_software IS NULL OR installed_software = '' THEN $2
-          WHEN POSITION($2 in installed_software) = 0 THEN CONCAT(installed_software, ', ', $2)
-          ELSE installed_software
+          WHEN installed_softwares IS NULL OR installed_softwares = '' THEN $2
+          WHEN POSITION($2 in installed_softwares) = 0 THEN CONCAT(installed_softwares, ', ', $2)
+          ELSE installed_softwares
         END
     WHERE mac_address = $3
   `;
-
+ 
   // Update the software status and installed software list based on mac_address
   db.none(sql, [status, installedSoftware, macAddress])
     .then(() => {
@@ -181,7 +181,6 @@ async function updateWallpaperStatus(macAddress, status) {
 
   try {
     await db.none(query, values);
-    console.log("[DB] Wallpaper status updated.");
   } catch (error) {
     console.error("[DB] Error updating wallpaper status:", error);
     throw error;
@@ -220,8 +219,6 @@ async function processSingleMessage(ws, message, channelData) {
 
 function handleSubscription(ws, parsedMessage, channelData) {
   const { channels: requestedChannels } = parsedMessage;
-
-  console.log("[Service] Subscribing to channels:", requestedChannels);
 
   requestedChannels.forEach((channel) => {
     if (!channelClients[channel]) {
@@ -438,7 +435,6 @@ app.get("/clients/:mac_address/last-sync", async (req, res) => {
 //systems traking API
 app.post("/database-sync", async (req, res) => {
   const { data: rows } = req.body;
-  console.log(rows);
 
   if (!rows?.length) {
     return res.status(400).json({ message: "No data provided" });
