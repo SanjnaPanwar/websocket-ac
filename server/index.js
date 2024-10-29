@@ -161,7 +161,7 @@ function updateSoftwareStatus(macAddress, installedSoftware, status) {
         END
     WHERE mac_address = $3
   `;
- 
+
   // Update the software status and installed software list based on mac_address
   db.none(sql, [status, installedSoftware, macAddress])
     .then(() => {
@@ -639,5 +639,78 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to upload image", error: error.message });
+  }
+});
+
+// Endpoint to check for alerts if a client hasn't synced in 3 days
+app.get("/clients/alerts", async (req, res) => {
+  try {
+    // Date calculations for different periods
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    const formattedThreeDaysAgo = threeDaysAgo.toISOString();
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const formattedSevenDaysAgo = sevenDaysAgo.toISOString();
+
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const formattedOneMonthAgo = oneMonthAgo.toISOString();
+
+    // Query to get clients who haven't synced in the last 3 days
+    const query3Days = `
+      SELECT id, name, mac_address, last_sync 
+      FROM sama_clients 
+      WHERE last_sync < $1
+    `;
+
+    // Query to get clients who haven't synced in the last 7 days
+    const query7Days = `
+      SELECT id, name, mac_address, last_sync 
+      FROM sama_clients 
+      WHERE last_sync < $1
+    `;
+
+    // Query to get clients who haven't synced in the last month
+    const query1Month = `
+      SELECT id, name, mac_address, last_sync 
+      FROM sama_clients 
+      WHERE last_sync < $1
+    `;
+
+    // Execute all queries using pg-promise
+    const notSyncedIn3Days = await db.any(query3Days, [formattedThreeDaysAgo]);
+    const notSyncedIn7Days = await db.any(query7Days, [formattedSevenDaysAgo]);
+    const notSyncedIn1Month = await db.any(query1Month, [formattedOneMonthAgo]);
+
+    // Structure the alerts
+    const alerts = {
+      notSyncedIn3Days: notSyncedIn3Days.map((row) => ({
+        clientId: row.id,
+        clientName: row.name,
+        macAddress: row.mac_address,
+        lastSynced: row.last_sync,
+      })),
+      notSyncedIn7Days: notSyncedIn7Days.map((row) => ({
+        clientId: row.id,
+        clientName: row.name,
+        macAddress: row.mac_address,
+        lastSynced: row.last_sync,
+      })),
+      notSyncedIn1Month: notSyncedIn1Month.map((row) => ({
+        clientId: row.id,
+        clientName: row.name,
+        macAddress: row.mac_address,
+        lastSynced: row.last_sync,
+      })),
+    };
+
+    res.json({
+      message: "Alert checks completed.",
+      alerts: alerts,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to check for alerts." });
   }
 });
