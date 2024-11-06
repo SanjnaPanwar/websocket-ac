@@ -645,60 +645,78 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 // Endpoint to check for alerts if a client hasn't synced in 3 days
 app.get("/clients/alerts", async (req, res) => {
   try {
-    // Date calculations for different periods
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-    const formattedThreeDaysAgo = threeDaysAgo.toISOString();
-
+    // Date calculations
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const formattedSevenDaysAgo = sevenDaysAgo.toISOString();
+    const formattedSevenDaysAgo = sevenDaysAgo
+      .toISOString()
+      .replace("T", " ")
+      .replace("Z", "");
 
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    const formattedOneMonthAgo = oneMonthAgo.toISOString();
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+    const formattedFifteenDaysAgo = fifteenDaysAgo
+      .toISOString()
+      .replace("T", " ")
+      .replace("Z", "");
 
-    // Query to get clients who haven't synced in the last 3 days
-    const query3Days = `
-      SELECT id, name, mac_address, last_sync 
-      FROM sama_clients 
-      WHERE last_sync < $1
-    `;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const formattedThirtyDaysAgo = thirtyDaysAgo
+      .toISOString()
+      .replace("T", " ")
+      .replace("Z", "");
 
-    // Query to get clients who haven't synced in the last 7 days
+    // Define queries
     const query7Days = `
-      SELECT id, name, mac_address, last_sync 
+      SELECT * 
+      FROM sama_clients 
+      WHERE last_sync < $1 AND last_sync >= $2
+    `;
+
+    const query15Days = `
+      SELECT * 
+      FROM sama_clients 
+      WHERE last_sync < $1 AND last_sync >= $2
+    `;
+
+    const query30Days = `
+      SELECT * 
       FROM sama_clients 
       WHERE last_sync < $1
     `;
 
-    // Query to get clients who haven't synced in the last month
-    const query1Month = `
-      SELECT id, name, mac_address, last_sync 
-      FROM sama_clients 
-      WHERE last_sync < $1
-    `;
+    // Executing the queries
+    const notSyncedIn7Days = await db.any(query7Days, [
+      formattedSevenDaysAgo, // formatted as YYYY-MM-DD HH:MM:SS.SSS
+      formattedFifteenDaysAgo, // similarly formatted
+    ]);
 
-    // Execute all queries using pg-promise
-    const notSyncedIn3Days = await db.any(query3Days, [formattedThreeDaysAgo]);
-    const notSyncedIn7Days = await db.any(query7Days, [formattedSevenDaysAgo]);
-    const notSyncedIn1Month = await db.any(query1Month, [formattedOneMonthAgo]);
+    const notSyncedIn15Days = await db.any(query15Days, [
+      formattedFifteenDaysAgo,
+      formattedSevenDaysAgo,
+    ]);
 
-    // Structure the alerts
+    const notSyncedIn30Days = await db.any(query30Days, [
+      formattedThirtyDaysAgo,
+      formattedFifteenDaysAgo,
+    ]);
+
+    // Structure alerts
     const alerts = {
-      notSyncedIn3Days: notSyncedIn3Days.map((row) => ({
-        clientId: row.id,
-        clientName: row.name,
-        macAddress: row.mac_address,
-        lastSynced: row.last_sync,
-      })),
       notSyncedIn7Days: notSyncedIn7Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
       })),
-      notSyncedIn1Month: notSyncedIn1Month.map((row) => ({
+      notSyncedIn15Days: notSyncedIn15Days.map((row) => ({
+        clientId: row.id,
+        clientName: row.name,
+        macAddress: row.mac_address,
+        lastSynced: row.last_sync,
+      })),
+      notSyncedIn30Days: notSyncedIn30Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
@@ -711,6 +729,7 @@ app.get("/clients/alerts", async (req, res) => {
       alerts: alerts,
     });
   } catch (error) {
+    console.error("Error fetching alerts:", error);
     res.status(500).json({ error: "Failed to check for alerts." });
   }
 });
