@@ -643,6 +643,17 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 });
 
 // Endpoint to check for alerts if a client hasn't synced in 3 days
+const nodemailer = require("nodemailer");
+
+// Create a transporter for sending email (customize with your SMTP details)
+const transporter = nodemailer.createTransport({
+  service: process.env.EMAIL_HOST, // or your email provider's service
+  auth: {
+    user: process.env.EMAIL_USER, // replace with your email
+    pass: process.env.EMAIL_PASS, // replace with your email password
+  },
+});
+
 app.get("/clients/alerts", async (req, res) => {
   try {
     // Date calculations
@@ -667,42 +678,58 @@ app.get("/clients/alerts", async (req, res) => {
       .replace("T", " ")
       .replace("Z", "");
 
-    // Define queries
+    // Queries for different sync time ranges
     const query7Days = `
-      SELECT * 
+      SELECT id, name, mac_address, last_sync 
       FROM sama_clients 
       WHERE last_sync < $1 AND last_sync >= $2
     `;
-
     const query15Days = `
-      SELECT * 
+      SELECT id, name, mac_address, last_sync 
       FROM sama_clients 
       WHERE last_sync < $1 AND last_sync >= $2
     `;
-
     const query30Days = `
-      SELECT * 
+      SELECT id, name, mac_address, last_sync 
       FROM sama_clients 
       WHERE last_sync < $1
     `;
 
-    // Executing the queries
+    // Execute queries
     const notSyncedIn7Days = await db.any(query7Days, [
-      formattedSevenDaysAgo, // formatted as YYYY-MM-DD HH:MM:SS.SSS
-      formattedFifteenDaysAgo, // similarly formatted
+      formattedSevenDaysAgo,
+      formattedFifteenDaysAgo,
     ]);
-
     const notSyncedIn15Days = await db.any(query15Days, [
       formattedFifteenDaysAgo,
-      formattedSevenDaysAgo,
+      formattedThirtyDaysAgo,
     ]);
-
     const notSyncedIn30Days = await db.any(query30Days, [
       formattedThirtyDaysAgo,
-      formattedFifteenDaysAgo,
     ]);
 
-    // Structure alerts
+    // Send email if any clients have not synced in over 30 days
+    if (notSyncedIn30Days.length > 0) {
+      const emailContent = notSyncedIn30Days
+        .map(
+          (row) => `
+        - ID: ${row.id}, Name: ${row.name}, MAC: ${row.mac_address}, Last Synced: ${row.last_sync}
+      `
+        )
+        .join("\n");
+
+      const mailOptions = {
+        from: process.env.EMAIL_FROM,
+        to: process.env.EMAIL_TO, // replace with the alert recipient's email
+        subject: "Clients Not Synced in Over 30 Days",
+        text: `The following clients have not synced in over 30 days:\n\n${emailContent}`,
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log("Alert email sent successfully.");
+    }
+
+    // Structure alerts for the response
     const alerts = {
       notSyncedIn7Days: notSyncedIn7Days.map((row) => ({
         clientId: row.id,
