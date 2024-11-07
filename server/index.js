@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import AWS from "aws-sdk";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
+import nodemailer from 'nodemailer';
 
 // AWS S3 setup
 const s3 = new AWS.S3({
@@ -642,18 +643,19 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-// Endpoint to check for alerts if a client hasn't synced in 3 days
-const nodemailer = require("nodemailer");
 
 // Create a transporter for sending email (customize with your SMTP details)
 const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_HOST, // or your email provider's service
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: true, 
   auth: {
     user: process.env.EMAIL_USER, // replace with your email
     pass: process.env.EMAIL_PASS, // replace with your email password
   },
 });
 
+// Endpoint to check for alerts if a client hasn't synced in 3 days
 app.get("/clients/alerts", async (req, res) => {
   try {
     // Date calculations
