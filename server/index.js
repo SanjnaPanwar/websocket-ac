@@ -710,26 +710,6 @@ app.get("/clients/alerts", async (req, res) => {
       formattedThirtyDaysAgo,
     ]);
 
-    // Send email if any clients have not synced in over 30 days
-    if (notSyncedIn30Days.length > 0) {
-      const emailContent = notSyncedIn30Days
-        .map(
-          (row) => `
-        - ID: ${row.id}, Name: ${row.name}, MAC: ${row.mac_address}, Last Synced: ${row.last_sync}
-      `
-        )
-        .join("\n");
-
-      const mailOptions = {
-        from: process.env.EMAIL_FROM,
-        to: process.env.EMAIL_TO, // replace with the alert recipient's email
-        subject: "Clients Not Synced in Over 30 Days",
-        text: `The following clients have not synced in over 30 days:\n\n${emailContent}`,
-      };
-
-      await transporter.sendMail(mailOptions);
-      console.log("Alert email sent successfully.");
-    }
 
     // Structure alerts for the response
     const alerts = {
