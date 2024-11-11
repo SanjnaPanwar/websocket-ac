@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 import AWS from "aws-sdk";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
 
 // AWS S3 setup
 const s3 = new AWS.S3({
@@ -59,9 +59,18 @@ const wss = new WebSocketServer({ server });
 
 // Middleware
 app.use(express.json());
+const allowedOrigins = [process.env.CLIENT_URL, process.env.LOCAL_CLIENT_URL];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL,
+    origin: function (origin, callback) {
+      if (allowedOrigins.includes(origin) || !origin) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // If using cookies or authorization headers
   })
 );
 
@@ -643,17 +652,36 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-
 // Create a transporter for sending email (customize with your SMTP details)
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
-  secure: true, 
-  auth: {
-    user: process.env.EMAIL_USER, // replace with your email
-    pass: process.env.EMAIL_PASS, // replace with your email password
-  },
-});
+// const transporter = nodemailer.createTransport({
+//   host: process.env.EMAIL_HOST,
+//   port: process.env.EMAIL_PORT,
+//   secure: true,
+//   auth: {
+//     user: process.env.EMAIL_USER, // replace with your email
+//     pass: process.env.EMAIL_PASS, // replace with your email password
+//   },
+// });
+// // Send email if any clients have not synced in over 30 days
+// if (notSyncedIn30Days.length > 0) {
+//   const emailContent = notSyncedIn30Days
+//     .map(
+//       (row) => `
+//         - ID: ${row.id}, Name: ${row.name}, MAC: ${row.mac_address}, Last Synced: ${row.last_sync}
+//       `
+//     )
+//     .join("\n");
+
+//   const mailOptions = {
+//     from: process.env.EMAIL_FROM,
+//     to: process.env.EMAIL_TO, // replace with the alert recipient's email
+//     subject: "Clients Not Synced in Over 30 Days",
+//     text: `The following clients have not synced in over 30 days:\n\n${emailContent}`,
+//   };
+
+//   await transporter.sendMail(mailOptions);
+//   console.log("Alert email sent successfully.");
+// }
 
 // Endpoint to check for alerts if a client hasn't synced in 3 days
 app.get("/clients/alerts", async (req, res) => {
@@ -709,7 +737,6 @@ app.get("/clients/alerts", async (req, res) => {
     const notSyncedIn30Days = await db.any(query30Days, [
       formattedThirtyDaysAgo,
     ]);
-
 
     // Structure alerts for the response
     const alerts = {
