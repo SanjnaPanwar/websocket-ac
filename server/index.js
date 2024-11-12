@@ -374,7 +374,7 @@ app.get("/clients", async (req, res) => {
   try {
     // Fetch clients with pagination, including only necessary columns
     const clients = await db.any(
-      `SELECT name, mac_address
+      `SELECT name, mac_address, serial_number
        FROM sama_clients
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
@@ -402,6 +402,7 @@ app.get("/clients", async (req, res) => {
         return {
           name: client.name,
           mac_address: client.mac_address,
+          serial_number: client.serial_number,
           total_active_time,
           location: latestTracking ? latestTracking.location : null, // Set location if available
         };
