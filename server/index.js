@@ -197,6 +197,19 @@ async function updateWallpaperStatus(macAddress, status) {
   }
 }
 
+// Function to update serial number in the `sama_client` table
+async function updateSerialNumber(macAddress, serial_number) {
+  const query = `UPDATE sama_clients SET serial_number = $1 WHERE mac_address = $2`;
+  const values = [serial_number, macAddress];
+
+  try {
+    await db.none(query, values);
+  } catch (error) {
+    console.error("[DB] Error updating wallpaper status:", error);
+    throw error;
+  }
+}
+
 // Main message processor
 async function processMessage(ws, parsedMessage, channelData) {
   // If the parsed message contains an array of actions (multiple types)
@@ -220,6 +233,9 @@ async function processSingleMessage(ws, message, channelData) {
       break;
     case "wallpaper":
       await handleWallpaperUpdate(message);
+      break;
+    case "serial number":
+      await handleSerialNumberUpdate(message);
       break;
     default:
       // console.error("[Service] Unknown message type:", message.type);
@@ -271,6 +287,19 @@ async function handleWallpaperUpdate(message) {
   await updateWallpaperStatus(mac_address, status);
 }
 
+// Function to handle serial number updates
+async function handleSerialNumberUpdate(message) {
+  const { mac_address, serial_number } = message;
+
+  // Validate data
+  if (!mac_address || !serial_number) {
+    console.error("[Service] Invalid wallpaper message data:", message);
+    return;
+  }
+
+  // Update the database based on mac_address
+  await updateSerialNumber(mac_address, serial_number);
+}
 // Structure to store channel subscriptions
 const channelClients = {};
 
@@ -362,8 +391,10 @@ app.get("/clients", async (req, res) => {
     // Iterate over each client and fetch tracking data + total active time
     const clientsWithActiveTime = await Promise.all(
       clients.map(async (client) => {
-        const trackingData = await getTrackingDataByMacAddress(client.mac_address);
-        
+        const trackingData = await getTrackingDataByMacAddress(
+          client.mac_address
+        );
+
         // Assuming the latest tracking data contains the most recent location and active time
         const latestTracking = trackingData[0]; // Get the latest tracking record
         const total_active_time = calculateTotalActiveTime(trackingData);
