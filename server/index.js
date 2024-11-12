@@ -234,7 +234,7 @@ async function processSingleMessage(ws, message, channelData) {
     case "wallpaper":
       await handleWallpaperUpdate(message);
       break;
-    case "serial number":
+    case "serialNumber":
       await handleSerialNumberUpdate(message);
       break;
     default:
