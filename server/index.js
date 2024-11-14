@@ -290,16 +290,16 @@ async function handleWallpaperUpdate(message) {
 
 // Function to handle serial number updates
 async function handleSerialNumberUpdate(message) {
-  const { mac_address, serial_number } = message;
+  const { mac_address, serial } = message;
 
   // Validate data
-  if (!mac_address || !serial_number) {
+  if (!mac_address || !serial) {
     console.error("[Service] Invalid wallpaper message data:", message);
     return;
   }
 
   // Update the database based on mac_address
-  await updateSerialNumber(mac_address, serial_number);
+  await updateSerialNumber(mac_address, serial);
 }
 // Structure to store channel subscriptions
 const channelClients = {};
