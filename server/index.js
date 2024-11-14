@@ -10,6 +10,7 @@ import AWS from "aws-sdk";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
+import cron from "node-cron";
 
 // AWS S3 setup
 const s3 = new AWS.S3({
@@ -688,37 +689,6 @@ app.post("/upload", upload.single("image"), async (req, res) => {
   }
 });
 
-// Create a transporter for sending email (customize with your SMTP details)
-// const transporter = nodemailer.createTransport({
-//   host: process.env.EMAIL_HOST,
-//   port: process.env.EMAIL_PORT,
-//   secure: true,
-//   auth: {
-//     user: process.env.EMAIL_USER, // replace with your email
-//     pass: process.env.EMAIL_PASS, // replace with your email password
-//   },
-// });
-// // Send email if any clients have not synced in over 30 days
-// if (notSyncedIn30Days.length > 0) {
-//   const emailContent = notSyncedIn30Days
-//     .map(
-//       (row) => `
-//         - ID: ${row.id}, Name: ${row.name}, MAC: ${row.mac_address}, Last Synced: ${row.last_sync}
-//       `
-//     )
-//     .join("\n");
-
-//   const mailOptions = {
-//     from: process.env.EMAIL_FROM,
-//     to: process.env.EMAIL_TO, // replace with the alert recipient's email
-//     subject: "Clients Not Synced in Over 30 Days",
-//     text: `The following clients have not synced in over 30 days:\n\n${emailContent}`,
-//   };
-
-//   await transporter.sendMail(mailOptions);
-//   console.log("Alert email sent successfully.");
-// }
-
 // Endpoint to check for alerts if a client hasn't synced in 3 days
 app.get("/clients/alerts", async (req, res) => {
   try {
@@ -803,5 +773,72 @@ app.get("/clients/alerts", async (req, res) => {
   } catch (error) {
     console.error("Error fetching alerts:", error);
     res.status(500).json({ error: "Failed to check for alerts." });
+  }
+});
+
+//Alerts cron job for 30 days
+// Create a transporter for sending emails
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Function to send an email if there are clients not synced in over 30 days
+async function sendEmailAlert(notSyncedIn30Days) {
+  if (notSyncedIn30Days.length === 0) return; // Skip if no unsynced clients
+
+  const emailContent = notSyncedIn30Days
+    .map(
+      (row) =>
+        `- ID: ${row.id}, Name: ${row.name}, MAC: ${row.mac_address}, Last Synced: ${row.last_sync}, Serial Number: ${row.serial_number}`
+    )
+    .join("\n");
+
+  const mailOptions = {
+    from: process.env.EMAIL_FROM,
+    to: process.env.EMAIL_TO,
+    subject: "Clients Not Synced in Over 30 Days",
+    text: `The following clients have not synced in over 30 days:\n\n${emailContent}`,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log("Alert email sent successfully.");
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+}
+
+// Query clients who haven't synced in over 30 days
+const query30Days = `
+  SELECT id, name, mac_address, last_sync, serial_number 
+  FROM sama_clients 
+  WHERE last_sync < $1
+`;
+
+// Schedule the email alert for every day at 11:50 PM
+cron.schedule('50 23 * * *', async () => {
+// cron.schedule("*/2 * * * *", async () => {
+  console.log("Running daily email alert check...");
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const formattedThirtyDaysAgo = thirtyDaysAgo
+    .toISOString()
+    .replace("T", " ")
+    .replace("Z", "");
+
+  try {
+    const notSyncedIn30Days = await db.any(query30Days, [
+      formattedThirtyDaysAgo,
+    ]);
+    await sendEmailAlert(notSyncedIn30Days);
+  } catch (error) {
+    console.error("Error fetching or sending alerts:", error);
   }
 });
