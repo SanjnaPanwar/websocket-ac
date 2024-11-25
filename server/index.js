@@ -51,8 +51,8 @@ app.get("/", (req, res) => {
   res.send("Server is running.");
 });
 
-const server = app.listen(8080, () => {
-  console.log("Server running on port 8080 and database connected.");
+const server = app.listen(process.env.PORT, () => {
+  console.log(`Server running on port ${process.env.PORT} and database connected.`);
 });
 
 // WebSocket server
