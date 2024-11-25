@@ -3,7 +3,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import pgPromise from "pg-promise";
 import cors from "cors";
 import dotenv from "dotenv";
-import { promises as fs } from "fs";
+// import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import AWS from "aws-sdk";
@@ -11,6 +11,7 @@ import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
+import fs from "fs/promises";
 
 // AWS S3 setup
 const s3 = new AWS.S3({
