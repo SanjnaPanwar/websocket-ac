@@ -432,19 +432,33 @@ app.get("/clients", async (req, res) => {
 app.get("/client", async (req, res) => {
   const { mac_address, serial_number } = req.query;
 
-  if (!mac_address || !serial_number) {
+  // Ensure at least one parameter is provided
+  if (!mac_address && !serial_number) {
     return res
       .status(400)
-      .json({ message: "mac_address and serial_number are required" });
+      .json({ message: "Either mac_address or serial_number is required" });
   }
 
   try {
-    // Fetch client details from sama_clients table
+    // Build dynamic query based on available parameters
+    const queryConditions = [];
+    const queryParams = [];
+
+    if (mac_address) {
+      queryConditions.push("mac_address = $1");
+      queryParams.push(mac_address);
+    }
+    if (serial_number) {
+      queryConditions.push(`serial_number = $${queryParams.length + 1}`);
+      queryParams.push(serial_number);
+    }
+
     const client = await db.oneOrNone(
-      `SELECT name, mac_address,software_status, wallpaper_status, last_sync, installed_softwares, serial_number, created_at
+      `SELECT name, mac_address, software_status, wallpaper_status, last_sync, 
+              installed_softwares, serial_number, created_at
        FROM sama_clients
-       WHERE mac_address = $1 AND serial_number = $2`,
-      [mac_address, serial_number]
+       WHERE ${queryConditions.join(" AND ")}`,
+      queryParams
     );
 
     if (!client) {
@@ -457,7 +471,7 @@ app.get("/client", async (req, res) => {
        FROM sama_system_tracking
        WHERE mac_address = $1
        ORDER BY created_at DESC`,
-      [mac_address]
+      [client.mac_address] // Always use the `mac_address` from the found client
     );
 
     // Calculate total active time
@@ -468,6 +482,10 @@ app.get("/client", async (req, res) => {
       client_detail: {
         name: client.name,
         mac_address: client.mac_address,
+        software_status: client.software_status,
+        wallpaper_status: client.wallpaper_status,
+        last_sync: client.last_sync,
+        installed_softwares: client.installed_softwares,
         serial_number: client.serial_number,
         created_at: client.created_at,
       },
