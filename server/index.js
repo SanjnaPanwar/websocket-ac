@@ -53,7 +53,9 @@ app.get("/", (req, res) => {
 });
 
 const server = app.listen(process.env.PORT, () => {
-  console.log(`Server running on port ${process.env.PORT} and database connected.`);
+  console.log(
+    `Server running on port ${process.env.PORT} and database connected.`
+  );
 });
 
 // WebSocket server
@@ -424,6 +426,57 @@ app.get("/clients", async (req, res) => {
   } catch (err) {
     console.error("Error fetching clients:", err.message);
     res.status(500).json({ message: "Failed to fetch clients" });
+  }
+});
+
+app.get("/client", async (req, res) => {
+  const { mac_address, serial_number } = req.query;
+
+  if (!mac_address || !serial_number) {
+    return res
+      .status(400)
+      .json({ message: "mac_address and serial_number are required" });
+  }
+
+  try {
+    // Fetch client details from sama_clients table
+    const client = await db.oneOrNone(
+      `SELECT name, mac_address,software_status, wallpaper_status, last_sync, installed_softwares, serial_number, created_at
+       FROM sama_clients
+       WHERE mac_address = $1 AND serial_number = $2`,
+      [mac_address, serial_number]
+    );
+
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // Fetch tracking data from sama_system_tracking table
+    const trackingData = await db.any(
+      `SELECT *
+       FROM sama_system_tracking
+       WHERE mac_address = $1
+       ORDER BY created_at DESC`,
+      [mac_address]
+    );
+
+    // Calculate total active time
+    const total_active_time = calculateTotalActiveTime(trackingData);
+
+    // Prepare final response
+    res.json({
+      client_detail: {
+        name: client.name,
+        mac_address: client.mac_address,
+        serial_number: client.serial_number,
+        created_at: client.created_at,
+      },
+      trackingData,
+      total_active_time,
+    });
+  } catch (err) {
+    console.error("Error fetching client data:", err.message);
+    res.status(500).json({ message: "Failed to fetch client data" });
   }
 });
 
@@ -823,8 +876,8 @@ const query30Days = `
 `;
 
 // Schedule the email alert for every day at 11:50 PM
-cron.schedule('50 23 * * *', async () => {
-// cron.schedule("*/2 * * * *", async () => {
+cron.schedule("50 23 * * *", async () => {
+  // cron.schedule("*/2 * * * *", async () => {
   console.log("Running daily email alert check...");
 
   const thirtyDaysAgo = new Date();
