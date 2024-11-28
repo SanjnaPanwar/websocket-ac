@@ -202,7 +202,7 @@ async function updateWallpaperStatus(macAddress, status) {
 }
 
 // Function to create or update a record in the `sama_clients` table
-async function createOrUpdateClientRecord(macAddress, serialNumber) {
+async function createClientRecord(macAddress, serialNumber) {
   const trimmedMacAddress = macAddress.trim();
   const trimmedSerialNumber = serialNumber.trim();
 
