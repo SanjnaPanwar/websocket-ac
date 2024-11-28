@@ -201,21 +201,42 @@ async function updateWallpaperStatus(macAddress, status) {
   }
 }
 
-// Function to create a new record in the `sama_clients` table
-async function createClientRecord(macAddress, serialNumber) {
-  const query = `
-    INSERT INTO main.sama_clients (mac_address, serial_number, created_at)
-    VALUES ($1, $2, NOW())
-    ON CONFLICT (mac_address, serial_number)
-    DO NOTHING
-  `;
-  const values = [macAddress.trim(), serialNumber.trim()];
+// Function to create or update a record in the `sama_clients` table
+async function createOrUpdateClientRecord(macAddress, serialNumber) {
+  const trimmedMacAddress = macAddress.trim();
+  const trimmedSerialNumber = serialNumber.trim();
 
   try {
-    await db.none(query, values);
-    console.log("[DB] Record created successfully or already exists.");
+    // Check if the record already exists based on mac_address
+    const existingClient = await db.oneOrNone(
+      `SELECT id, serial_number FROM main.sama_clients WHERE mac_address = $1`,
+      [trimmedMacAddress]
+    );
+
+    if (existingClient) {
+      // If the record exists, update the serial_number
+      if (existingClient.serial_number !== trimmedSerialNumber) {
+        await db.none(
+          `UPDATE main.sama_clients 
+           SET serial_number = $1, last_sync = NOW() 
+           WHERE mac_address = $2`,
+          [trimmedSerialNumber, trimmedMacAddress]
+        );
+        console.log("[DB] Record updated with new serial number.");
+      } else {
+        console.log("[DB] Serial number is the same, no update needed.");
+      }
+    } else {
+      // If the record does not exist, create a new record
+      await db.none(
+        `INSERT INTO main.sama_clients (mac_address, serial_number, created_at)
+         VALUES ($1, $2, NOW())`,
+        [trimmedMacAddress, trimmedSerialNumber]
+      );
+      console.log("[DB] Record created successfully.");
+    }
   } catch (error) {
-    console.error("[DB] Error creating record:", error);
+    console.error("[DB] Error creating or updating record:", error);
 
     // Specific error handling
     if (error.code === "23505") {
@@ -574,10 +595,22 @@ app.post("/database-sync", async (req, res) => {
   }
 
   try {
-    for (const { mac_address, active_time, date, location, username, softwareStatus, wallpaperStatus } of rows) {
+    for (const {
+      mac_address,
+      active_time,
+      date,
+      location,
+      username,
+      softwareStatus,
+      wallpaperStatus,
+    } of rows) {
       // Validate mac_address, active_time, and date (ensure they are provided)
       if (!mac_address || !active_time || !date) {
-        return res.status(400).json({ message: "Missing required fields (mac_address, active_time, date)" });
+        return res
+          .status(400)
+          .json({
+            message: "Missing required fields (mac_address, active_time, date)",
+          });
       }
 
       // Check if the record exists in the sama_clients table
@@ -656,7 +689,6 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
-
 
 // Get all channels from JSON
 app.get("/channels", async (req, res) => {
