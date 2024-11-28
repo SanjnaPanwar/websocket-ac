@@ -209,7 +209,7 @@ async function createOrUpdateClientRecord(macAddress, serialNumber) {
   try {
     // Check if the record already exists based on mac_address
     const existingClient = await db.oneOrNone(
-      `SELECT id, serial_number FROM main.sama_clients WHERE mac_address = $1`,
+      `SELECT id, serial_number FROM sama_clients WHERE mac_address = $1`,
       [trimmedMacAddress]
     );
 
@@ -217,7 +217,7 @@ async function createOrUpdateClientRecord(macAddress, serialNumber) {
       // If the record exists, update the serial_number
       if (existingClient.serial_number !== trimmedSerialNumber) {
         await db.none(
-          `UPDATE main.sama_clients 
+          `UPDATE sama_clients 
            SET serial_number = $1, last_sync = NOW() 
            WHERE mac_address = $2`,
           [trimmedSerialNumber, trimmedMacAddress]
@@ -229,7 +229,7 @@ async function createOrUpdateClientRecord(macAddress, serialNumber) {
     } else {
       // If the record does not exist, create a new record
       await db.none(
-        `INSERT INTO main.sama_clients (mac_address, serial_number, created_at)
+        `INSERT INTO sama_clients (mac_address, serial_number, created_at)
          VALUES ($1, $2, NOW())`,
         [trimmedMacAddress, trimmedSerialNumber]
       );
