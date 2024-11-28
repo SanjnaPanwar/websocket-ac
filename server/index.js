@@ -201,16 +201,30 @@ async function updateWallpaperStatus(macAddress, status) {
   }
 }
 
-// Function to update serial number in the `sama_client` table
-async function updateSerialNumber(macAddress, serial_number) {
-  const query = `UPDATE sama_clients SET serial_number = $1 WHERE mac_address = $2`;
-  const values = [serial_number, macAddress];
+// Function to create a new record in the `sama_clients` table
+async function createClientRecord(macAddress, serialNumber) {
+  const query = `
+    INSERT INTO main.sama_clients (mac_address, serial_number, created_at)
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (mac_address, serial_number)
+    DO NOTHING
+  `;
+  const values = [macAddress.trim(), serialNumber.trim()];
 
   try {
     await db.none(query, values);
+    console.log("[DB] Record created successfully or already exists.");
   } catch (error) {
-    console.error("[DB] Error updating wallpaper status:", error);
-    throw error;
+    console.error("[DB] Error creating record:", error);
+
+    // Specific error handling
+    if (error.code === "23505") {
+      // Unique constraint violation (e.g., mac_address and serial_number combination)
+      throw new Error(
+        "Record with the same macAddress and serialNumber already exists."
+      );
+    }
+    throw error; // Rethrow for unhandled cases
   }
 }
 
@@ -239,7 +253,7 @@ async function processSingleMessage(ws, message, channelData) {
       await handleWallpaperUpdate(message);
       break;
     case "serialNumber":
-      await handleSerialNumberUpdate(message);
+      await handleClientRecordCreation(message);
       break;
     default:
       // console.error("[Service] Unknown message type:", message.type);
@@ -292,17 +306,17 @@ async function handleWallpaperUpdate(message) {
 }
 
 // Function to handle serial number updates
-async function handleSerialNumberUpdate(message) {
+async function handleClientRecordCreation(message) {
   const { mac_address, serial } = message;
 
   // Validate data
   if (!mac_address || !serial) {
-    console.error("[Service] Invalid wallpaper message data:", message);
+    console.error("[Service] Invalid serial message data:", message);
     return;
   }
 
   // Update the database based on mac_address
-  await updateSerialNumber(mac_address, serial);
+  await createClientRecord(mac_address, serial);
 }
 // Structure to store channel subscriptions
 const channelClients = {};
@@ -560,17 +574,52 @@ app.post("/database-sync", async (req, res) => {
   }
 
   try {
-    for (const { mac_address, active_time, date, location, username } of rows) {
-      // Insert or update client, and set last_sync to the current time
-      await db.none(
-        `
-        INSERT INTO sama_clients (name, mac_address, last_sync)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (mac_address)
-        DO UPDATE SET last_sync = NOW(), name = EXCLUDED.name
-      `,
-        [username, mac_address]
+    for (const { mac_address, active_time, date, location, username, softwareStatus, wallpaperStatus } of rows) {
+      // Validate mac_address, active_time, and date (ensure they are provided)
+      if (!mac_address || !active_time || !date) {
+        return res.status(400).json({ message: "Missing required fields (mac_address, active_time, date)" });
+      }
+
+      // Check if the record exists in the sama_clients table
+      const existingClient = await db.oneOrNone(
+        `SELECT 1 FROM sama_clients WHERE mac_address = $1`,
+        [mac_address]
       );
+
+      if (existingClient) {
+        // If the record exists, update the client information
+        await db.none(
+          `
+          UPDATE sama_clients
+          SET 
+            last_sync = NOW(),
+            name = COALESCE($1, name), 
+            software_status = COALESCE($2, software_status),
+            wallpaper_status = COALESCE($3, wallpaper_status)
+          WHERE mac_address = $4
+          `,
+          [
+            username || null, // If no username is provided, set it to null
+            softwareStatus || null, // If no softwareStatus is provided, set it to null
+            wallpaperStatus || null, // If no wallpaperStatus is provided, set it to null
+            mac_address,
+          ]
+        );
+      } else {
+        // If the record does not exist, insert a new client record
+        await db.none(
+          `
+          INSERT INTO sama_clients (mac_address, name, last_sync, software_status, wallpaper_status)
+          VALUES ($1, $2, NOW(), $3, $4)
+          `,
+          [
+            mac_address,
+            username || null, // If no username is provided, set it to null
+            softwareStatus || null, // If no softwareStatus is provided, set it to null
+            wallpaperStatus || null, // If no wallpaperStatus is provided, set it to null
+          ]
+        );
+      }
 
       // Check if there's an existing tracking record for this mac_address and date
       const existingRow = await db.oneOrNone(
@@ -579,21 +628,23 @@ app.post("/database-sync", async (req, res) => {
       );
 
       if (existingRow) {
-        // Update tracking data and last_sync in sama_clients when a tracking record exists
+        // If tracking record exists, update it
         await db.tx(async (t) => {
           await t.none(
             `UPDATE sama_system_tracking SET active_time = $1, location = $2 WHERE mac_address = $3 AND "date" = $4`,
             [active_time, location, mac_address, date]
           );
+          // Ensure client last_sync is also updated
           await t.none(
             `UPDATE sama_clients SET last_sync = NOW() WHERE mac_address = $1`,
             [mac_address]
           );
         });
       } else {
-        // Insert new tracking data
+        // If no tracking record exists, insert a new record
         await db.none(
-          `INSERT INTO sama_system_tracking (mac_address, active_time, "date", location) VALUES ($1, $2, $3, $4)`,
+          `INSERT INTO sama_system_tracking (mac_address, active_time, "date", location) 
+          VALUES ($1, $2, $3, $4)`,
           [mac_address, active_time, date, location]
         );
       }
@@ -605,6 +656,7 @@ app.post("/database-sync", async (req, res) => {
     res.status(500).json({ message: "Failed to synchronize database" });
   }
 });
+
 
 // Get all channels from JSON
 app.get("/channels", async (req, res) => {
