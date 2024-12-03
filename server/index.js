@@ -47,7 +47,7 @@ const db = pgp({
 const app = express();
 app.use(express.json());
 
-// All routes
+// All routes in Index file only
 app.get("/", (req, res) => {
   res.send("Server is running.");
 });
