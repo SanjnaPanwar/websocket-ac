@@ -872,17 +872,17 @@ app.get("/clients/alerts", async (req, res) => {
 
     // Queries for different sync time ranges
     const query7Days = `
-      SELECT id, name, mac_address, last_sync 
+      SELECT id, name, mac_address, last_sync, ngo_name
       FROM sama_clients 
       WHERE last_sync < $1 AND last_sync >= $2
     `;
     const query15Days = `
-      SELECT id, name, mac_address, last_sync 
+      SELECT id, name, mac_address, last_sync, ngo_name 
       FROM sama_clients 
       WHERE last_sync < $1 AND last_sync >= $2
     `;
     const query30Days = `
-      SELECT id, name, mac_address, last_sync 
+      SELECT id, name, mac_address, last_sync, ngo_name 
       FROM sama_clients 
       WHERE last_sync < $1
     `;
@@ -907,18 +907,21 @@ app.get("/clients/alerts", async (req, res) => {
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
+        ngo_name: row.ngo_name
       })),
       notSyncedIn15Days: notSyncedIn15Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
+        ngo_name: row.ngo_name
       })),
       notSyncedIn30Days: notSyncedIn30Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
+        ngo_name: row.ngo_name
       })),
     };
 
