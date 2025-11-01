@@ -42,6 +42,8 @@ const db = pgp({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  options: "-c search_path=main",
+  ssl: { rejectUnauthorized: false }, // Enable SSL with proper settings
 });
 
 const app = express();
@@ -414,7 +416,7 @@ app.get("/clients", async (req, res) => {
     // Fetch clients with pagination, including only necessary columns
     const clients = await db.any(
       `SELECT name, mac_address, serial_number, ngo_name
-       FROM sama_clients
+       FROM main.sama_clients
        ORDER BY created_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
@@ -422,7 +424,7 @@ app.get("/clients", async (req, res) => {
 
     // Fetch total number of clients for pagination metadata
     const totalClients = await db.one(
-      `SELECT COUNT(*) FROM sama_clients`,
+      `SELECT COUNT(*) FROM main.sama_clients`,
       [],
       (c) => +c.count
     );
@@ -607,11 +609,9 @@ app.post("/database-sync", async (req, res) => {
     } of rows) {
       // Validate mac_address, active_time, and date (ensure they are provided)
       if (!mac_address || !active_time || !date) {
-        return res
-          .status(400)
-          .json({
-            message: "Missing required fields (mac_address, active_time, date)",
-          });
+        return res.status(400).json({
+          message: "Missing required fields (mac_address, active_time, date)",
+        });
       }
 
       // Check if the record exists in the sama_clients table
@@ -908,21 +908,21 @@ app.get("/clients/alerts", async (req, res) => {
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
-        ngo_name: row.ngo_name
+        ngo_name: row.ngo_name,
       })),
       notSyncedIn15Days: notSyncedIn15Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
-        ngo_name: row.ngo_name
+        ngo_name: row.ngo_name,
       })),
       notSyncedIn30Days: notSyncedIn30Days.map((row) => ({
         clientId: row.id,
         clientName: row.name,
         macAddress: row.mac_address,
         lastSynced: row.last_sync,
-        ngo_name: row.ngo_name
+        ngo_name: row.ngo_name,
       })),
     };
 
